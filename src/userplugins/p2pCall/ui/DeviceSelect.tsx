@@ -1,3 +1,9 @@
+/*
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 import { Select, useEffect, useState } from "@webpack/common";
 
 export function DeviceSelect({ kind, value, onChange }: { kind: MediaDeviceKind; value: string; onChange(v: string): void; }) {

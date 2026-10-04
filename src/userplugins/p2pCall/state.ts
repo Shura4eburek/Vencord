@@ -1,6 +1,9 @@
 /*
- * P2PCall — автомат состояний звонка (чистая логика)
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
  */
+
 export interface Peer { callId: string; peerId: string; channelId: string; }
 export type EndReason = "hangup" | "remote-hangup" | "declined" | "busy" | "no-answer" | "ice-timeout" | "ice-failed";
 export type CallState =

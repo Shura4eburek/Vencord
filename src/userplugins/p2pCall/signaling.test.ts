@@ -1,9 +1,15 @@
+/*
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { pairHint } from "./crypto";
 import { WsLike } from "./relay";
-import { PeerCtx, SignalMsg, Signaling } from "./signaling";
+import { PeerCtx, Signaling,SignalMsg } from "./signaling";
 
 const A = "600000000000000001";
 const B = "500000000000000002";

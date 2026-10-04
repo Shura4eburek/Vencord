@@ -1,6 +1,9 @@
 /*
- * P2PCall — минимальный клиент одного релея Nostr с переподключением
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
  */
+
 export interface NostrEvent { id: string; pubkey: string; created_at: number; kind: number; tags: string[][]; content: string; sig: string; }
 export interface NostrFilter { kinds: number[]; "#t": string[]; }
 export interface WsLike {
@@ -45,7 +48,7 @@ export class RelayConn {
         this.stopped = true;
         if (this.timer != null) this.cancel(this.timer);
         this.timer = null;
-        const ws = this.ws;
+        const { ws } = this;
         this.ws = null;
         ws?.close();
         this.setUp(false);

@@ -1,6 +1,9 @@
 /*
- * P2PCall — захват микрофона, камеры, экрана и вывод звука
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
  */
+
 const dev = (id: string) => (id && id !== "default" ? { deviceId: { exact: id } } : {});
 
 export function getMic(deviceId: string) {

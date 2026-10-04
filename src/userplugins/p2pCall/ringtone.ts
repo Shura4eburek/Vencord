@@ -1,6 +1,9 @@
 /*
- * P2PCall — звук вызова (двухтональный сигнал раз в 2 с)
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
  */
+
 let ctx: AudioContext | null = null;
 let timer: ReturnType<typeof setInterval> | undefined;
 

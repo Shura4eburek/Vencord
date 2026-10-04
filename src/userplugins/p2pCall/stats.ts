@@ -1,6 +1,9 @@
 /*
- * P2PCall — сводка RTCStatsReport для полоски статистики
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
  */
+
 export type PathType = "host" | "srflx" | "relay" | "unknown";
 export interface Counters { at: number; recvBytes: number; sentBytes: number; lost: number; received: number; }
 export interface CallStats { rttMs: number | null; lossPct: number; inKbps: number; outKbps: number; path: PathType; counters: Counters; }

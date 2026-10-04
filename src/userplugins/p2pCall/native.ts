@@ -1,6 +1,9 @@
 /*
- * P2PCall — main-процесс: источники экрана и CSP для релеев
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
  */
+
 import { ConnectSrc, CspPolicies } from "@main/csp";
 import { RendererSettings } from "@main/settings";
 import { desktopCapturer, IpcMainInvokeEvent } from "electron";
