@@ -1,0 +1,111 @@
+.p2p-panel {
+    position: fixed;
+    z-index: 1000;
+    min-width: 280px;
+    max-width: 640px;
+    padding: 10px;
+    border-radius: 8px;
+    background: var(--background-floating);
+    color: var(--text-normal);
+    box-shadow: var(--elevation-high);
+    user-select: none;
+    cursor: move;
+}
+
+.p2p-head,
+.p2p-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.p2p-head {
+    justify-content: space-between;
+    margin-bottom: 6px;
+}
+
+.p2p-row {
+    flex-wrap: wrap;
+    margin-top: 6px;
+}
+
+.p2p-title {
+    font-weight: 600;
+}
+
+.p2p-stage {
+    position: relative;
+}
+
+.p2p-main {
+    width: 100%;
+    max-height: 360px;
+    border-radius: 6px;
+    background: #000;
+}
+
+.p2p-self {
+    position: absolute;
+    right: 6px;
+    bottom: 6px;
+    width: 120px;
+    border-radius: 4px;
+    background: #000;
+}
+
+.p2p-icon,
+.p2p-btn {
+    cursor: pointer;
+    border: 0;
+    border-radius: 4px;
+    padding: 4px 8px;
+    background: var(--background-modifier-accent);
+    color: inherit;
+}
+
+.p2p-ok {
+    background: var(--status-positive);
+    color: #fff;
+}
+
+.p2p-no {
+    background: var(--status-danger);
+    color: #fff;
+}
+
+.p2p-stats {
+    margin-top: 6px;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.p2p-sources {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 8px;
+    padding: 8px 0;
+}
+
+.p2p-source {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 6px;
+    border: 0;
+    border-radius: 6px;
+    background: var(--background-secondary);
+    color: var(--text-normal);
+    cursor: pointer;
+}
+
+.p2p-source img {
+    width: 100%;
+    border-radius: 4px;
+}
+
+.p2p-source span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+}
