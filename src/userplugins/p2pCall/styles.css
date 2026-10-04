@@ -5,9 +5,10 @@
     max-width: 640px;
     padding: 10px;
     border-radius: 8px;
-    background: var(--background-floating);
-    color: var(--text-normal);
-    box-shadow: var(--elevation-high);
+    background: #2b2d31;
+    border: 1px solid rgb(255 255 255 / 8%);
+    color: #dbdee1;
+    box-shadow: 0 8px 24px rgb(0 0 0 / 45%);
     user-select: none;
     cursor: move;
 }
@@ -59,24 +60,24 @@
     border: 0;
     border-radius: 4px;
     padding: 4px 8px;
-    background: var(--background-modifier-accent);
+    background: #4e5058;
     color: inherit;
 }
 
 .p2p-ok {
-    background: var(--status-positive);
+    background: #23a55a;
     color: #fff;
 }
 
 .p2p-no {
-    background: var(--status-danger);
+    background: #da373c;
     color: #fff;
 }
 
 .p2p-stats {
     margin-top: 6px;
     font-size: 12px;
-    color: var(--text-muted);
+    color: #949ba4;
 }
 
 .p2p-sources {
@@ -93,8 +94,8 @@
     padding: 6px;
     border: 0;
     border-radius: 6px;
-    background: var(--background-secondary);
-    color: var(--text-normal);
+    background: #1e1f22;
+    color: #dbdee1;
     cursor: pointer;
 }
 
