@@ -46,6 +46,7 @@ export class CallController {
     private mic: MediaStream | null = null;
     private pendingSignals: OutSignal[] = [];
     private iceRestarted = false;
+    private camBusy = false;
     private hints = new Map<string, PeerCtx>();
 
     constructor(private selfId: string, private hooks: Hooks) { }
@@ -108,19 +109,23 @@ export class CallController {
 
     async toggleCam() {
         const { session } = this;
-        if (!session) return;
-        if (this.v.local.cam) {
-            await session.setTrack("cam", null);
-            this.set({ local: { ...this.v.local, cam: null } });
-            return;
-        }
+        // повторный клик, пока камера включается, не должен захватить вторую
+        if (!session || this.camBusy) return;
+        this.camBusy = true;
         try {
+            if (this.v.local.cam) {
+                await session.setTrack("cam", null);
+                this.set({ local: { ...this.v.local, cam: null } });
+                return;
+            }
             const cam = await getCamera(settings.store.cameraDevice);
             if (this.session !== session) { cam.getTracks().forEach(t => t.stop()); return; }
             await session.setTrack("cam", cam);
             this.set({ local: { ...this.v.local, cam } });
         } catch (e) {
             this.hooks.warn("Камера недоступна: " + (e as Error).message);
+        } finally {
+            this.camBusy = false;
         }
     }
 
@@ -208,12 +213,28 @@ export class CallController {
     private async startSession(peer: Peer, video: boolean) {
         this.peer = peer;
         this.iceRestarted = false;
+
+        // микрофон до сессии: первый offer сразу несёт звук — нет второго раунда переговоров
+        let mic: MediaStream | null = null;
+        try {
+            mic = await getMic(settings.store.inputDevice);
+        } catch (e) {
+            this.hooks.warn("Микрофон недоступен: " + (e as Error).message);
+        }
+        if (this.peer !== peer) { mic?.getTracks().forEach(t => t.stop()); return; }
+
         const session = new Session(isPolite(this.selfId, peer.peerId), {
             signal: m => this.sig?.send(peer, peer.callId, m.type === "ice" ? { type: "ice", candidate: m.candidate } : { type: m.type, sdp: m.sdp }),
             remoteMedia: (kind, stream) => this.onRemote(kind, stream),
             iceState: st => this.onIce(st),
         }, settings.store.screenMaxBitrateMbps * 1_000_000);
         this.session = session;
+        if (mic) {
+            // пользователь мог выключить микрофон, пока шёл захват
+            mic.getAudioTracks().forEach(t => { t.enabled = this.v.local.mic; });
+            this.mic = mic;
+            await session.setTrack("mic", mic);
+        }
         for (const s of this.pendingSignals.splice(0)) session.handle(s).catch(e => console.error("[P2PCall] signal", e));
 
         this.statsTimer = setInterval(async () => {
@@ -221,14 +242,6 @@ export class CallController {
             this.set({ stats: await session.stats() });
         }, 1000);
 
-        try {
-            const mic = await getMic(settings.store.inputDevice);
-            if (this.session !== session) { mic.getTracks().forEach(t => t.stop()); return; }
-            this.mic = mic;
-            await session.setTrack("mic", mic);
-        } catch (e) {
-            this.hooks.warn("Микрофон недоступен: " + (e as Error).message);
-        }
         if (video && this.session === session) await this.toggleCam();
     }
 

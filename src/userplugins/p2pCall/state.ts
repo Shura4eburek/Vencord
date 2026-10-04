@@ -106,7 +106,7 @@ export function reduce(s: CallState, e: CallEvent): Result {
                     { kind: "ringtone", on: false },
                     { kind: "clear-timers" },
                     { kind: "send", peer, msg: { type: "accept" } },
-                    { kind: "start-session", peer, video: s.video },
+                    { kind: "start-session", peer, video: false },
                     { kind: "start-timer", which: "ice", callId: s.callId },
                 ],
             };

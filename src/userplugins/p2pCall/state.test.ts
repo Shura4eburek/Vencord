@@ -121,3 +121,10 @@ test("isPolite compares snowflakes as BigInt", () => {
     assert.equal(isPolite("100000000000000000", "99999999999999999"), false);
     assert.equal(isPolite("9007199254740993", "9007199254740992"), false);
 });
+
+test("accept never turns on the callee camera, even for a video ring", () => {
+    const inc = reduce(idle, { type: "ring", video: true, ...peer }).state;
+    const r = reduce(inc, { type: "accept" });
+    const start = r.effects.find(e => e.kind === "start-session");
+    assert.deepEqual(start, { kind: "start-session", peer, video: false });
+});

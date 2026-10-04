@@ -23,11 +23,19 @@ export const ICE_SERVERS: RTCIceServer[] = [
 
 const VIDEO_ORDER = ["video/VP9", "video/H264"];
 
+/** Perfect negotiation: входящий offer конфликтует с нашим, если мы не готовы его принять */
+export function offerCollides(makingOffer: boolean, state: RTCSignalingState, settingRemoteAnswer: boolean): boolean {
+    const ready = !makingOffer && (state === "stable" || settingRemoteAnswer);
+    return !ready;
+}
+
 export class Session {
     private pc = new RTCPeerConnection({ iceServers: ICE_SERVERS, bundlePolicy: "max-bundle" });
     private ctl: RTCDataChannel;
     private makingOffer = false;
     private ignoreOffer = false;
+    private settingRemoteAnswer = false;
+    private queue: Promise<void> = Promise.resolve();
     private senders = new Map<TrackKind, RTCRtpSender>();
     private local = new Map<TrackKind, MediaStream>();
     private remoteKinds = new Map<string, TrackKind>();
@@ -109,7 +117,14 @@ export class Session {
         await sender.setParameters(p).catch(e => console.warn("[P2PCall] setParameters", e));
     }
 
-    async handle(m: OutSignal) {
+    /** Сигналы обрабатываются строго по очереди: иначе offer проверяется на коллизию посреди применения answer */
+    handle(m: OutSignal): Promise<void> {
+        const run = this.queue.then(() => this.apply(m));
+        this.queue = run.catch(() => { });
+        return run;
+    }
+
+    private async apply(m: OutSignal) {
         if (m.type === "ice") {
             try {
                 await this.pc.addIceCandidate(m.candidate ?? undefined);
@@ -118,10 +133,15 @@ export class Session {
             }
             return;
         }
-        const collision = m.type === "offer" && (this.makingOffer || this.pc.signalingState !== "stable");
+        const collision = m.type === "offer" && offerCollides(this.makingOffer, this.pc.signalingState, this.settingRemoteAnswer);
         this.ignoreOffer = !this.polite && collision;
         if (this.ignoreOffer) return;
-        await this.pc.setRemoteDescription({ type: m.type, sdp: m.sdp });
+        this.settingRemoteAnswer = m.type === "answer";
+        try {
+            await this.pc.setRemoteDescription({ type: m.type, sdp: m.sdp });
+        } finally {
+            this.settingRemoteAnswer = false;
+        }
         if (m.type === "offer") {
             await this.pc.setLocalDescription();
             this.cb.signal({ type: "answer", sdp: tuneOpus(this.pc.localDescription!.sdp, DEFAULT_OPUS) });
