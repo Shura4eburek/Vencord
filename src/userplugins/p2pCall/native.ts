@@ -8,13 +8,16 @@ import { ConnectSrc, CspPolicies } from "@main/csp";
 import { RendererSettings } from "@main/settings";
 import { desktopCapturer, IpcMainInvokeEvent } from "electron";
 
+import { relayCspSource } from "./relay";
+
 const DEFAULT_RELAYS = ["wss://relay.damus.io", "wss://nos.lol", "wss://nostr.mom"];
 
 function allowRelays() {
     const raw = (RendererSettings.store.plugins?.P2PCall as { relays?: string; } | undefined)?.relays;
     const urls = raw ? raw.split(",").map(s => s.trim()).filter(Boolean) : [];
     for (const u of [...DEFAULT_RELAYS, ...urls]) {
-        try { CspPolicies[new URL(u).host] = ConnectSrc; } catch { }
+        const src = relayCspSource(u);
+        if (src) CspPolicies[src] = ConnectSrc;
     }
 }
 allowRelays();

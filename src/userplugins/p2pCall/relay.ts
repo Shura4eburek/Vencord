@@ -100,3 +100,13 @@ export class RelayConn {
         };
     }
 }
+
+/** Источник для CSP connect-src. Хост без схемы разрешает только https, поэтому wss указываем явно */
+export function relayCspSource(url: string): string | null {
+    try {
+        const u = new URL(url);
+        return u.protocol === "wss:" || u.protocol === "ws:" ? `${u.protocol}//${u.host}` : null;
+    } catch {
+        return null;
+    }
+}

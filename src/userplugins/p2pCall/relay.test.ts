@@ -7,7 +7,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { BACKOFF_MS, NostrEvent, RelayConn, WsLike } from "./relay";
+import { BACKOFF_MS, NostrEvent, RelayConn, relayCspSource, WsLike } from "./relay";
 
 class FakeWs implements WsLike {
     readyState = 0;
@@ -103,4 +103,11 @@ test("unsubscribe sends CLOSE; stop does not reconnect", () => {
     const before = timers.length;
     conn.stop();
     assert.equal(timers.length, before);
+});
+
+test("relayCspSource keeps the wss scheme (scheme-less hosts only allow https)", () => {
+    assert.equal(relayCspSource("wss://relay.damus.io"), "wss://relay.damus.io");
+    assert.equal(relayCspSource("wss://relay.example.com:7447/path"), "wss://relay.example.com:7447");
+    assert.equal(relayCspSource("not a url"), null);
+    assert.equal(relayCspSource("https://evil.example"), null);
 });
