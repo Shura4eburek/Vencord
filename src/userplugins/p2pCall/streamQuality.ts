@@ -21,8 +21,21 @@ const MAX_H = 4320;
 
 export const heightLabel = (h: Height) => (h === 0 ? "Исходное" : `${h}p`);
 
+/** Потолок legacy-захвата экрана (chromeMediaSource: desktop): выше — OverconstrainedError */
+export const LEGACY_MAX_FPS = 60;
+
+/** Legacy-захват: без minFrameRate Chromium отдаёт 30 FPS по умолчанию, поэтому min = max = выбранное (≤ 60) */
 export function captureConstraints(q: StreamQuality) {
-    return { maxWidth: MAX_W, maxHeight: q.height || MAX_H, maxFrameRate: q.fps };
+    const fps = Math.min(q.fps, LEGACY_MAX_FPS);
+    return { maxWidth: MAX_W, maxHeight: q.height || MAX_H, minFrameRate: fps, maxFrameRate: fps };
+}
+
+/** Выше 60 FPS legacy-захват не умеет — пробуем getDisplayMedia */
+export const usesDisplayMedia = (q: StreamQuality) => q.fps > LEGACY_MAX_FPS;
+
+export function displayMediaConstraints(q: StreamQuality): MediaTrackConstraints {
+    const frameRate = { ideal: q.fps, max: q.fps };
+    return q.height ? { height: { max: q.height }, frameRate } : { frameRate };
 }
 
 export function trackConstraints(q: StreamQuality): MediaTrackConstraints {

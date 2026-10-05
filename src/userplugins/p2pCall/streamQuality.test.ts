@@ -7,15 +7,17 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { captureConstraints, DEFAULT_QUALITY, encoderParams, fpsAllowed, heightLabel, hzFromIntervals, needsRecapture, sanitizeQuality, trackConstraints } from "./streamQuality";
+import { captureConstraints, DEFAULT_QUALITY, displayMediaConstraints, encoderParams, fpsAllowed, heightLabel, hzFromIntervals, needsRecapture, sanitizeQuality, trackConstraints, usesDisplayMedia } from "./streamQuality";
 
 test("defaults: source resolution, 60 fps, 20 Mbps, keep fps", () => {
     assert.deepEqual(DEFAULT_QUALITY, { height: 0, fps: 60, maxMbps: 20, prefer: "fps" });
 });
 
 test("capture constraints cap height and fps, never upscale width", () => {
-    assert.deepEqual(captureConstraints({ height: 1080, fps: 120, maxMbps: 40, prefer: "fps" }), { maxWidth: 7680, maxHeight: 1080, maxFrameRate: 120 });
-    assert.deepEqual(captureConstraints({ height: 0, fps: 60, maxMbps: 20, prefer: "fps" }), { maxWidth: 7680, maxHeight: 4320, maxFrameRate: 60 });
+    // без minFrameRate Chromium ставит захвату экрана 30 FPS; выше 60 legacy-захват не пускает (OverconstrainedError)
+    assert.deepEqual(captureConstraints({ height: 1080, fps: 120, maxMbps: 40, prefer: "fps" }), { maxWidth: 7680, maxHeight: 1080, minFrameRate: 60, maxFrameRate: 60 });
+    assert.deepEqual(captureConstraints({ height: 0, fps: 60, maxMbps: 20, prefer: "fps" }), { maxWidth: 7680, maxHeight: 4320, minFrameRate: 60, maxFrameRate: 60 });
+    assert.deepEqual(captureConstraints({ height: 720, fps: 30, maxMbps: 10, prefer: "fps" }), { maxWidth: 7680, maxHeight: 720, minFrameRate: 30, maxFrameRate: 30 });
 });
 
 test("track constraints for live change", () => {
@@ -62,4 +64,11 @@ test("needsRecapture: raising resolution or fps needs a new capture, lowering do
     assert.equal(needsRecapture(at(1440, 120), at(720, 30)), false);
     assert.equal(needsRecapture(at(0, 60), at(1440, 60)), false);
     assert.equal(needsRecapture(at(0, 60), at(0, 60)), false);
+});
+
+test("display media path is used only above the legacy 60 fps ceiling", () => {
+    assert.equal(usesDisplayMedia({ height: 0, fps: 60, maxMbps: 20, prefer: "fps" }), false);
+    assert.equal(usesDisplayMedia({ height: 0, fps: 120, maxMbps: 20, prefer: "fps" }), true);
+    assert.deepEqual(displayMediaConstraints({ height: 1440, fps: 144, maxMbps: 80, prefer: "fps" }), { height: { max: 1440 }, frameRate: { ideal: 144, max: 144 } });
+    assert.deepEqual(displayMediaConstraints({ height: 0, fps: 120, maxMbps: 80, prefer: "fps" }), { frameRate: { ideal: 120, max: 120 } });
 });

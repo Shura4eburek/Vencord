@@ -27,6 +27,29 @@ allowRelays();
 
 export interface ScreenSource { id: string; name: string; thumb: string; }
 
+let pendingSource: string | null = null;
+const handled = new WeakSet<Electron.Session>();
+
+/**
+ * getDisplayMedia в Discord выключен (нет обработчика → NotSupported). Ставим свой, который отдаёт источник,
+ * выбранный в нашем окне выбора. Нужен для демки выше 60 FPS: legacy-захват выше не пускает.
+ */
+export function prepareDisplayMedia(e: IpcMainInvokeEvent, sourceId: string) {
+    pendingSource = sourceId;
+    const ses = e.sender.session;
+    if (handled.has(ses)) return;
+    handled.add(ses);
+    ses.setDisplayMediaRequestHandler((_req, callback) => {
+        const id = pendingSource;
+        pendingSource = null;
+        if (!id) { callback({}); return; }
+        desktopCapturer.getSources({ types: ["screen", "window"] }).then(
+            list => { const s = list.find(x => x.id === id); callback(s ? { video: s } : {}); },
+            () => callback({}),
+        );
+    });
+}
+
 export async function getSources(_: IpcMainInvokeEvent): Promise<ScreenSource[]> {
     const sources = await desktopCapturer.getSources({ types: ["screen", "window"], thumbnailSize: { width: 320, height: 180 } });
     return sources.map(s => ({ id: s.id, name: s.name, thumb: s.thumbnail.toDataURL() }));

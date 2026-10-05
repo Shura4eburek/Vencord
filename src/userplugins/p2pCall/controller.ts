@@ -39,6 +39,12 @@ interface Hooks {
 }
 
 const ENDED_SHOW_MS = 3000;
+
+/** Что реально выдал захват: разрешение и FPS по настройкам трека — сравнить с выбранным качеством */
+function captureInfo(stream: MediaStream | null) {
+    const s = stream?.getVideoTracks()[0]?.getSettings();
+    return s ? `${s.width}x${s.height}@${Math.round(s.frameRate ?? 0)} ${s.displaySurface ?? "legacy"}` : null;
+}
 const NO_LOCAL: View["local"] = { mic: true, cam: null, screen: null };
 const NOT_SPEAKING: View["speaking"] = { self: false, peer: false };
 
@@ -334,7 +340,7 @@ export class CallController {
 
         this.diagTimer = setInterval(() => {
             if (this.session !== session || this.v.call.phase !== "connected" || !settings.store.diagLog || !this.v.stats) return;
-            console.info("[P2PCall] stats", JSON.stringify({ ...compactStats(this.v.stats), screenCodec: session.screenCodec(), quality: this.v.screenQuality }));
+            console.info("[P2PCall] stats", JSON.stringify({ ...compactStats(this.v.stats), screenCodec: session.screenCodec(), quality: this.v.screenQuality, capture: captureInfo(this.v.local.screen) }));
         }, 5000);
 
         if (video && this.session === session) await this.toggleCam();

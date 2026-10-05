@@ -4,7 +4,11 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { captureConstraints, StreamQuality } from "./streamQuality";
+import { PluginNative } from "@utils/types";
+
+import { captureConstraints, displayMediaConstraints, StreamQuality, usesDisplayMedia } from "./streamQuality";
+
+const Native = VencordNative.pluginHelpers.P2PCall as PluginNative<typeof import("./native")>;
 
 const dev = (id: string) => (id && id !== "default" ? { deviceId: { exact: id } } : {});
 
@@ -20,7 +24,16 @@ export function getCamera(deviceId: string) {
     });
 }
 
-export function getScreen(sourceId: string, q: StreamQuality) {
+/** До 60 FPS — legacy-захват; выше — getDisplayMedia через наш обработчик, при отказе откат на legacy */
+export async function getScreen(sourceId: string, q: StreamQuality): Promise<MediaStream> {
+    if (usesDisplayMedia(q)) {
+        try {
+            await Native.prepareDisplayMedia(sourceId);
+            return await navigator.mediaDevices.getDisplayMedia({ audio: false, video: displayMediaConstraints(q) });
+        } catch (e) {
+            console.warn("[P2PCall] getDisplayMedia failed, falling back to legacy capture", e);
+        }
+    }
     return navigator.mediaDevices.getUserMedia({
         audio: false,
         video: {
