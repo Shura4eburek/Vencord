@@ -60,7 +60,11 @@ export function checkForUpdate(_: IpcMainInvokeEvent): Promise<UpdateResult> {
     return applyUpdate(__dirname);
 }
 
+/**
+ * Запасной перезапуск. Только quit, не exit: Discord пишет токен входа на диск при штатном закрытии окна,
+ * app.exit(0) это пропускает — и после перезапуска аккаунт разлогинен.
+ */
 export function relaunch(_: IpcMainInvokeEvent) {
     app.relaunch();
-    app.exit(0);
+    app.quit();
 }

@@ -18,12 +18,19 @@ const EVERY_MS = 6 * 60 * 60 * 1000;
 let firstTimer: ReturnType<typeof setTimeout> | undefined;
 let everyTimer: ReturnType<typeof setInterval> | undefined;
 
+/** Штатный перезапуск Discord (им же Discord перезапускается после своих обновлений) — сохраняет вход в аккаунт */
+function relaunchDiscord() {
+    const discordRelaunch = (window as any).DiscordNative?.app?.relaunch;
+    if (typeof discordRelaunch === "function") discordRelaunch();
+    else Native.relaunch();
+}
+
 function notifyUpdated(version: string) {
     showNotification({
         title: "P2PCall обновлён",
         body: `Версия ${version}. Нажми, чтобы перезапустить Discord`,
         permanent: true,
-        onClick: () => Native.relaunch(),
+        onClick: relaunchDiscord,
     });
 }
 
