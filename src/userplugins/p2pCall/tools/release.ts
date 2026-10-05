@@ -8,6 +8,7 @@
 //   npx tsx src/userplugins/p2pCall/tools/release.ts "что изменилось"
 
 import { execFileSync } from "child_process";
+import { sign } from "crypto";
 import { copyFileSync, cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { homedir, tmpdir } from "os";
 import { join } from "path";
@@ -42,7 +43,11 @@ for (const name of UPDATE_FILES) {
     files[name] = sha256Hex(readFileSync(src));
     copyFileSync(src, join(work, name));
 }
-writeFileSync(join(work, "manifest.json"), JSON.stringify({ version, files }, null, 2));
+const manifest = Buffer.from(JSON.stringify({ version, files }, null, 2));
+writeFileSync(join(work, "manifest.json"), manifest);
+// подпись ключом, которого нет на GitHub: автообновление без неё ничего не ставит
+const key = readFileSync(join(homedir(), ".p2pcall", "release-key.pem"));
+writeFileSync(join(work, "manifest.sig"), sign(null, manifest, key));
 
 // установочный архив: шаблон + файлы сборки + установщик Vencord
 const pkg = join(work, "P2PCall-Vencord");
@@ -61,6 +66,7 @@ execFileSync("gh", [
     "--notes", notes,
     ...UPDATE_FILES.map(n => join(work, n)),
     join(work, "manifest.json"),
+    join(work, "manifest.sig"),
     zip,
 ], { stdio: "inherit" });
 
