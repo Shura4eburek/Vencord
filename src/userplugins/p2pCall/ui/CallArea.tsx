@@ -9,11 +9,13 @@ import type { Channel } from "@vencord/discord-types";
 import { Tooltip, UserStore, useState } from "@webpack/common";
 
 import type { CallController } from "../controller";
+import { videoLabel } from "../diagLog";
 import { settings } from "../settings";
 import { areaVisible, EndReason } from "../state";
 import type { PathType } from "../stats";
 import { CameraIcon, CameraOffIcon, HangupIcon, HeadphonesIcon, HeadphonesOffIcon, MicIcon, MicOffIcon, ScreenIcon, ScreenOffIcon } from "./icons";
 import { pickSource } from "./SourcePicker";
+import { StreamQualityMenu } from "./StreamQualityMenu";
 import { Tile } from "./Tile";
 import { useCallView } from "./useCallView";
 
@@ -80,7 +82,9 @@ export function CallAreaSlot({ c, channel, height }: { c: CallController; channe
         <div className="p2p-area" style={{ height: areaH }}>
             {connected && settings.store.showStats && v.stats && (
                 <div className="p2p-chip">
-                    {v.stats.rttMs ?? "—"} мс · потери {v.stats.lossPct}% · {PATH_TEXT[v.stats.path]}
+                    <div>{v.stats.rttMs ?? "—"} мс · потери {v.stats.lossPct}% · {PATH_TEXT[v.stats.path]}</div>
+                    {v.stats.video.out && <div>↑ {videoLabel(v.stats.video.out)} · {Math.round(v.stats.outKbps / 1000)} Мбит/с</div>}
+                    {v.stats.video.in && <div>↓ {videoLabel(v.stats.video.in)}</div>}
                 </div>
             )}
             <div className="p2p-tiles">
@@ -103,14 +107,10 @@ export function CallAreaSlot({ c, channel, height }: { c: CallController; channe
                             {v.local.cam ? <CameraIcon /> : <CameraOffIcon />}
                         </CtrlButton>
                         <CtrlButton label={v.local.screen ? "Остановить демонстрацию" : "Показать экран"} active={!!v.local.screen}
-                            onClick={() => v.local.screen ? c.stopScreen() : pickSource(id => c.startScreen(id))}>
+                            onClick={() => v.local.screen ? c.stopScreen() : pickSource((id, q) => c.startScreen(id, q))}>
                             {v.local.screen ? <ScreenOffIcon /> : <ScreenIcon />}
                         </CtrlButton>
-                        {v.local.screen && (
-                            <button className="p2p-hint" onClick={() => c.setHint(v.hint === "motion" ? "detail" : "motion")}>
-                                {v.hint === "motion" ? "Плавность" : "Чёткость"}
-                            </button>
-                        )}
+                        <StreamQualityMenu c={c} up />
                     </>}
                     <CtrlButton label="Отключиться" danger onClick={() => c.hangup()}>
                         <HangupIcon />

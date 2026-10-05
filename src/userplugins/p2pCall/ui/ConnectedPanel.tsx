@@ -10,6 +10,7 @@ import type { CallController } from "../controller";
 import { PATH_TEXT } from "./CallArea";
 import { CameraIcon, CameraOffIcon, HangupIcon, ScreenIcon, ScreenOffIcon } from "./icons";
 import { pickSource } from "./SourcePicker";
+import { StreamQualityMenu } from "./StreamQualityMenu";
 import { useCallView } from "./useCallView";
 
 export function ConnectedPanel({ c }: { c: CallController; }) {
@@ -36,8 +37,9 @@ export function ConnectedPanel({ c }: { c: CallController; }) {
                         {p => <button {...p} className="p2p-plaque-btn" onClick={() => c.toggleCam()}>{v.local.cam ? <CameraIcon width={20} height={20} /> : <CameraOffIcon width={20} height={20} />}</button>}
                     </Tooltip>
                     <Tooltip text={v.local.screen ? "Остановить демонстрацию" : "Показать экран"}>
-                        {p => <button {...p} className="p2p-plaque-btn" onClick={() => v.local.screen ? c.stopScreen() : pickSource(id => c.startScreen(id))}>{v.local.screen ? <ScreenOffIcon width={20} height={20} /> : <ScreenIcon width={20} height={20} />}</button>}
+                        {p => <button {...p} className="p2p-plaque-btn" onClick={() => v.local.screen ? c.stopScreen() : pickSource((id, q) => c.startScreen(id, q))}>{v.local.screen ? <ScreenOffIcon width={20} height={20} /> : <ScreenIcon width={20} height={20} />}</button>}
                     </Tooltip>
+                    <StreamQualityMenu c={c} up />
                 </>}
                 <Tooltip text="Отключиться">
                     {p => <button {...p} className="p2p-plaque-btn p2p-plaque-hangup" onClick={() => c.hangup()}><HangupIcon width={20} height={20} /></button>}
