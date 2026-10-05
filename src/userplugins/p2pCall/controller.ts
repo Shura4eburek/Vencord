@@ -4,16 +4,19 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { CodecChoice, probeCaps } from "./codecs";
 import { newCallId, pairHint } from "./crypto";
+import { compactStats } from "./diagLog";
 import { LevelMeter } from "./levelMeter";
 import { INITIAL_AUDIO, LocalAudio, toggleDeafenState, toggleMicState } from "./localAudio";
 import { getCamera, getMic, getScreen, playStream } from "./media";
 import { startRingtone, stopRingtone } from "./ringtone";
-import { OutSignal, ScreenHint, Session, TrackKind } from "./session";
-import { relayList, settings } from "./settings";
+import { OutSignal, Session, TrackKind } from "./session";
+import { relayList, savedQuality, saveQuality, settings } from "./settings";
 import { PeerCtx, Signaling,SignalMsg } from "./signaling";
 import { CallEvent, CallState, Effect, isMissedCall, isPolite, Peer, reduce } from "./state";
 import { CallStats } from "./stats";
+import { StreamQuality, trackConstraints } from "./streamQuality";
 
 export interface View {
     call: CallState;
@@ -23,7 +26,7 @@ export interface View {
     deafened: boolean;
     speaking: { self: boolean; peer: boolean; };
     stats: CallStats | null;
-    hint: ScreenHint;
+    screenQuality: StreamQuality;
 }
 
 interface Hooks {
@@ -40,7 +43,7 @@ const NO_LOCAL: View["local"] = { mic: true, cam: null, screen: null };
 const NOT_SPEAKING: View["speaking"] = { self: false, peer: false };
 
 export class CallController {
-    private v: View = { call: { phase: "idle" }, relaysUp: 0, remote: {}, local: NO_LOCAL, deafened: false, speaking: NOT_SPEAKING, stats: null, hint: "motion" };
+    private v: View = { call: { phase: "idle" }, relaysUp: 0, remote: {}, local: NO_LOCAL, deafened: false, speaking: NOT_SPEAKING, stats: null, screenQuality: savedQuality() };
     private listeners = new Set<() => void>();
     private sig: Signaling | null = null;
     private session: Session | null = null;
@@ -54,6 +57,9 @@ export class CallController {
     private pendingSignals: OutSignal[] = [];
     private iceRestarted = false;
     private camBusy = false;
+    private ownCaps = probeCaps().then(c => { console.info("[P2PCall] codecs", JSON.stringify(c)); return c; });
+    private screenSource: string | null = null;
+    private diagTimer: ReturnType<typeof setInterval> | undefined;
     private audioState: LocalAudio = INITIAL_AUDIO;
     private audioCtx: AudioContext | null = null;
     private selfMeter: LevelMeter | null = null;
@@ -155,13 +161,17 @@ export class CallController {
         }
     }
 
-    async startScreen(sourceId: string) {
+    async startScreen(sourceId: string, q: StreamQuality) {
         const { session } = this;
         if (!session) return;
+        saveQuality(q);
+        this.set({ screenQuality: q });
         try {
-            const screen = await getScreen(sourceId);
+            const screen = await getScreen(sourceId, q);
             if (this.session !== session) { screen.getTracks().forEach(t => t.stop()); return; }
             screen.getVideoTracks()[0].onended = () => { this.stopScreen(); };
+            this.screenSource = sourceId;
+            await session.setScreenQuality(q);
             await session.setTrack("screen", screen);
             this.set({ local: { ...this.v.local, screen } });
         } catch (e) {
@@ -172,12 +182,37 @@ export class CallController {
     async stopScreen() {
         if (!this.session || !this.v.local.screen) return;
         await this.session.setTrack("screen", null);
+        this.screenSource = null;
         this.set({ local: { ...this.v.local, screen: null } });
     }
 
-    async setHint(h: ScreenHint) {
-        this.set({ hint: h });
-        await this.session?.setScreenHint(h);
+    /** Смена качества на ходу: applyConstraints, при неудаче — перезахват того же источника */
+    async setScreenQuality(q: StreamQuality) {
+        const { session } = this;
+        const stream = this.v.local.screen;
+        saveQuality(q);
+        this.set({ screenQuality: q });
+        if (!session || !stream) return;
+        const track = stream.getVideoTracks()[0];
+        const want = q.height || Infinity;
+        let ok = false;
+        try {
+            await track.applyConstraints(trackConstraints(q));
+            const st = track.getSettings();
+            ok = (st.height ?? 0) <= want && (st.frameRate ?? 0) <= q.fps + 1;
+        } catch { }
+        if (!ok && this.screenSource) {
+            try {
+                const fresh = await getScreen(this.screenSource, q);
+                if (this.session !== session) { fresh.getTracks().forEach(t => t.stop()); return; }
+                const t = fresh.getVideoTracks()[0];
+                t.onended = () => { this.stopScreen(); };
+                await session.replaceScreenTrack(t);
+                ok = true;
+            } catch { }
+        }
+        if (!ok) this.hooks.warn("Не удалось сменить качество демки");
+        await session.setScreenQuality(q);
     }
 
     private onSignal(m: SignalMsg, ctx: PeerCtx) {
@@ -257,7 +292,7 @@ export class CallController {
             signal: m => this.sig?.send(peer, peer.callId, m.type === "ice" ? { type: "ice", candidate: m.candidate } : { type: m.type, sdp: m.sdp }),
             remoteMedia: (kind, stream) => this.onRemote(kind, stream),
             iceState: st => this.onIce(st),
-        }, settings.store.screenMaxBitrateMbps * 1_000_000);
+        }, { ownCaps: this.ownCaps, codec: () => settings.store.screenCodec as CodecChoice });
         this.session = session;
         if (mic) {
             // пользователь мог выключить микрофон, пока шёл захват
@@ -279,11 +314,18 @@ export class CallController {
             this.set({ stats: await session.stats() });
         }, 1000);
 
+        this.diagTimer = setInterval(() => {
+            if (this.session !== session || this.v.call.phase !== "connected" || !settings.store.diagLog || !this.v.stats) return;
+            console.info("[P2PCall] stats", JSON.stringify({ ...compactStats(this.v.stats), screenCodec: session.screenCodec(), quality: this.v.screenQuality }));
+        }, 5000);
+
         if (video && this.session === session) await this.toggleCam();
     }
 
     private stopSession() {
         clearInterval(this.statsTimer);
+        clearInterval(this.diagTimer);
+        this.screenSource = null;
         this.session?.close();
         this.session = null;
         this.peer = null;
