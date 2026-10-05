@@ -1,83 +1,248 @@
-.p2p-panel {
-    position: fixed;
-    z-index: 1000;
-    min-width: 280px;
-    max-width: 640px;
-    padding: 10px;
-    border-radius: 8px;
-    background: #2b2d31;
-    border: 1px solid rgb(255 255 255 / 8%);
-    color: #dbdee1;
-    box-shadow: 0 8px 24px rgb(0 0 0 / 45%);
-    user-select: none;
-    cursor: move;
+.p2p-area {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 16px 16px 20px;
+    background: #000;
+    color: #f2f3f5;
+    overflow: hidden;
+    flex-shrink: 0;
 }
 
-.p2p-head,
-.p2p-row {
+.p2p-tiles {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    align-items: center;
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+}
+
+.p2p-tile {
+    position: relative;
     display: flex;
     align-items: center;
-    gap: 8px;
+    justify-content: center;
+    height: 100%;
+    max-height: 100%;
+    aspect-ratio: 16 / 9;
+    max-width: 48%;
+    border-radius: 8px;
+    background: #1e1f22;
+    overflow: hidden;
+    box-shadow: 0 0 0 2px transparent;
+    transition: box-shadow 0.1s;
 }
 
-.p2p-head {
-    justify-content: space-between;
-    margin-bottom: 6px;
+.p2p-speaking {
+    box-shadow: 0 0 0 2px #23a55a;
 }
 
-.p2p-row {
-    flex-wrap: wrap;
-    margin-top: 6px;
+.p2p-ringing {
+    animation: p2p-ring 1.2s ease-in-out infinite;
 }
 
-.p2p-title {
-    font-weight: 600;
+@keyframes p2p-ring {
+    50% { box-shadow: 0 0 0 4px rgb(35 165 90 / 60%); }
 }
 
-.p2p-stage {
-    position: relative;
+.p2p-avatar {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
 }
 
-.p2p-main {
+.p2p-video {
     width: 100%;
-    max-height: 360px;
-    border-radius: 6px;
+    height: 100%;
+    object-fit: contain;
     background: #000;
 }
 
-.p2p-self {
+.p2p-mirror {
+    transform: scaleX(-1);
+}
+
+.p2p-tile-label {
     position: absolute;
-    right: 6px;
-    bottom: 6px;
-    width: 120px;
+    left: 8px;
+    bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
     border-radius: 4px;
-    background: #000;
+    background: rgb(0 0 0 / 60%);
+    font-size: 14px;
+    font-weight: 500;
 }
 
-.p2p-icon,
-.p2p-btn {
-    cursor: pointer;
+.p2p-tile-badge {
+    color: #f23f42;
+}
+
+.p2p-caption {
+    font-size: 14px;
+    color: #b5bac1;
+}
+
+.p2p-controls {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.p2p-ctrl {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
     border: 0;
-    border-radius: 4px;
-    padding: 4px 8px;
-    background: #4e5058;
-    color: inherit;
+    border-radius: 50%;
+    background: #2b2d31;
+    color: #f2f3f5;
+    cursor: pointer;
 }
 
-.p2p-ok {
-    background: #23a55a;
-    color: #fff;
+.p2p-ctrl:hover {
+    background: #3f4147;
 }
 
-.p2p-no {
+.p2p-ctrl-off {
+    background: #f2f3f5;
+    color: #000;
+}
+
+.p2p-ctrl-off:hover {
+    background: #dbdee1;
+}
+
+.p2p-ctrl-danger {
     background: #da373c;
     color: #fff;
 }
 
-.p2p-stats {
-    margin-top: 6px;
+.p2p-ctrl-danger:hover {
+    background: #a12d2f;
+}
+
+.p2p-hint {
+    height: 32px;
+    padding: 0 12px;
+    border: 0;
+    border-radius: 16px;
+    background: #2b2d31;
+    color: #f2f3f5;
+    cursor: pointer;
+}
+
+.p2p-chip {
+    position: absolute;
+    top: 8px;
+    right: 12px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: rgb(0 0 0 / 60%);
     font-size: 12px;
-    color: #949ba4;
+    color: #b5bac1;
+}
+
+.p2p-resize {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 6px;
+    cursor: ns-resize;
+}
+
+.p2p-plaque {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px;
+    border-bottom: 1px solid #3f4147;
+    background: #232428;
+    color: #f2f3f5;
+}
+
+.p2p-plaque-info {
+    min-width: 0;
+}
+
+.p2p-plaque-status {
+    font-size: 14px;
+    font-weight: 600;
+    color: #23a55a;
+}
+
+.p2p-plaque-wait {
+    color: #f0b232;
+}
+
+.p2p-plaque-peer {
+    max-width: 100%;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: #b5bac1;
+    font-size: 12px;
+    text-align: left;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
+}
+
+.p2p-plaque-peer:hover {
+    text-decoration: underline;
+}
+
+.p2p-plaque-buttons {
+    display: flex;
+    gap: 4px;
+}
+
+.p2p-plaque-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border: 0;
+    border-radius: 4px;
+    background: none;
+    color: #b5bac1;
+    cursor: pointer;
+}
+
+.p2p-plaque-btn:hover {
+    background: #3f4147;
+    color: #f2f3f5;
+}
+
+.p2p-plaque-hangup:hover {
+    background: #da373c;
+    color: #fff;
+}
+
+.p2p-incoming {
+    display: flex;
+    justify-content: center;
+    padding: 16px 0;
+}
+
+.p2p-incoming-avatar {
+    width: 96px;
+    height: 96px;
+    border-radius: 50%;
+    animation: p2p-ring 1.2s ease-in-out infinite;
 }
 
 .p2p-sources {
