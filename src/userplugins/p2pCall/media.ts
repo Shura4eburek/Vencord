@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { captureConstraints, StreamQuality } from "./streamQuality";
+
 const dev = (id: string) => (id && id !== "default" ? { deviceId: { exact: id } } : {});
 
 export function getMic(deviceId: string) {
@@ -18,16 +20,14 @@ export function getCamera(deviceId: string) {
     });
 }
 
-export function getScreen(sourceId: string) {
+export function getScreen(sourceId: string, q: StreamQuality) {
     return navigator.mediaDevices.getUserMedia({
         audio: false,
         video: {
             mandatory: {
                 chromeMediaSource: "desktop",
                 chromeMediaSourceId: sourceId,
-                maxWidth: 1920,
-                maxHeight: 1080,
-                maxFrameRate: 60,
+                ...captureConstraints(q),
             },
         } as MediaTrackConstraints,
     });
