@@ -4,11 +4,12 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { DEFAULT_OPUS, tuneOpus } from "./sdp";
+import { Caps, chooseCodec, CodecChoice, isCaps, orderCodecs } from "./codecs";
+import { DEFAULT_OPUS, tuneOpus, tuneVideo } from "./sdp";
 import { CallStats, Counters, summarizeStats } from "./stats";
+import { DEFAULT_QUALITY, encoderParams, StreamQuality } from "./streamQuality";
 
 export type TrackKind = "mic" | "cam" | "screen";
-export type ScreenHint = "motion" | "detail";
 export type OutSignal = { type: "offer" | "answer"; sdp: string; } | { type: "ice"; candidate: RTCIceCandidateInit | null; };
 export interface SessionCallbacks {
     signal(m: OutSignal): void;
@@ -21,7 +22,8 @@ export const ICE_SERVERS: RTCIceServer[] = [
     { urls: "stun:stun.cloudflare.com:3478" },
 ];
 
-const VIDEO_ORDER = ["video/VP9", "video/H264"];
+export interface SessionOptions { ownCaps: Promise<Caps>; codec: () => CodecChoice; }
+const tuneSdp = (sdp: string) => tuneVideo(tuneOpus(sdp, DEFAULT_OPUS));
 
 /** Perfect negotiation: входящий offer конфликтует с нашим, если мы не готовы его принять */
 export function offerCollides(makingOffer: boolean, state: RTCSignalingState, settingRemoteAnswer: boolean): boolean {
@@ -40,12 +42,18 @@ export class Session {
     private local = new Map<TrackKind, MediaStream>();
     private remoteKinds = new Map<string, TrackKind>();
     private remoteStreams = new Map<string, MediaStream>();
-    private hint: ScreenHint = "motion";
+    private quality: StreamQuality = DEFAULT_QUALITY;
+    private own: Caps | null = null;
+    private peer: Caps | null = null;
+    private chosen: string | null = null;
+    private codecChoice: () => CodecChoice;
     private prev?: Counters;
 
-    constructor(private polite: boolean, private cb: SessionCallbacks, private screenMaxBitrate: number) {
+    constructor(private polite: boolean, private cb: SessionCallbacks, opts: SessionOptions) {
+        this.codecChoice = opts.codec;
         this.ctl = this.pc.createDataChannel("ctl", { negotiated: true, id: 0 });
-        this.ctl.onopen = () => this.sendKinds();
+        this.ctl.onopen = () => { this.sendKinds(); this.sendCaps(); };
+        opts.ownCaps.then(c => { this.own = c; this.sendCaps(); });
         this.ctl.onmessage = e => this.onCtl(e.data);
 
         this.pc.onnegotiationneeded = async () => {
@@ -53,7 +61,7 @@ export class Session {
                 this.makingOffer = true;
                 await this.pc.setLocalDescription();
                 const d = this.pc.localDescription!;
-                this.cb.signal({ type: d.type as "offer", sdp: tuneOpus(d.sdp, DEFAULT_OPUS) });
+                this.cb.signal({ type: d.type as "offer", sdp: tuneSdp(d.sdp) });
             } catch (e) {
                 console.error("[P2PCall] negotiation", e);
             } finally {
@@ -92,29 +100,45 @@ export class Session {
             this.senders.set(kind, sender);
             if (kind === "screen") {
                 const tr = this.pc.getTransceivers().find(t => t.sender === sender);
+                this.chosen = chooseCodec(this.codecChoice(), this.own, this.peer);
                 const caps = RTCRtpReceiver.getCapabilities("video")?.codecs ?? [];
-                const rank = (m: string) => { const i = VIDEO_ORDER.indexOf(m); return i < 0 ? VIDEO_ORDER.length : i; };
-                tr?.setCodecPreferences([...caps].sort((a, b) => rank(a.mimeType) - rank(b.mimeType)));
+                tr?.setCodecPreferences(orderCodecs(caps, this.chosen));
                 await this.applyScreenParams();
             }
         }
         this.sendKinds();
     }
 
-    async setScreenHint(hint: ScreenHint) {
-        this.hint = hint;
+    async setScreenQuality(q: StreamQuality) {
+        this.quality = q;
         await this.applyScreenParams();
     }
+
+    /** Новый трек захвата в тот же MediaStream: id потока у собеседника не меняется, пересогласование не нужно */
+    async replaceScreenTrack(track: MediaStreamTrack) {
+        const sender = this.senders.get("screen");
+        const stream = this.local.get("screen");
+        if (!sender || !stream) { track.stop(); return; }
+        const old = stream.getVideoTracks()[0];
+        await sender.replaceTrack(track);
+        if (old) { stream.removeTrack(old); old.stop(); }
+        stream.addTrack(track);
+        await this.applyScreenParams();
+    }
+
+    screenCodec() { return this.senders.has("screen") ? this.chosen : null; }
 
     private async applyScreenParams() {
         const sender = this.senders.get("screen");
         if (!sender?.track) return;
-        sender.track.contentHint = this.hint;
+        const e = encoderParams(this.quality);
+        sender.track.contentHint = e.contentHint;
         const p = sender.getParameters();
         if (!p.encodings?.length) p.encodings = [{}];
-        p.encodings[0].maxBitrate = this.screenMaxBitrate;
-        (p as any).degradationPreference = this.hint === "motion" ? "maintain-framerate" : "maintain-resolution";
-        await sender.setParameters(p).catch(e => console.warn("[P2PCall] setParameters", e));
+        p.encodings[0].maxBitrate = e.maxBitrate;
+        p.encodings[0].maxFramerate = e.maxFramerate;
+        (p as any).degradationPreference = e.degradationPreference;
+        await sender.setParameters(p).catch(err => console.warn("[P2PCall] setParameters", err));
     }
 
     /** Сигналы обрабатываются строго по очереди: иначе offer проверяется на коллизию посреди применения answer */
@@ -144,7 +168,7 @@ export class Session {
         }
         if (m.type === "offer") {
             await this.pc.setLocalDescription();
-            this.cb.signal({ type: "answer", sdp: tuneOpus(this.pc.localDescription!.sdp, DEFAULT_OPUS) });
+            this.cb.signal({ type: "answer", sdp: tuneSdp(this.pc.localDescription!.sdp) });
         }
     }
 
@@ -173,9 +197,19 @@ export class Session {
         this.ctl.send(JSON.stringify({ type: "kinds", kinds }));
     }
 
+    private sendCaps() {
+        if (this.ctl.readyState !== "open" || !this.own) return;
+        this.ctl.send(JSON.stringify({ type: "caps", ...this.own }));
+    }
+
     private onCtl(data: string) {
-        let m: { type?: string; kinds?: Record<string, TrackKind>; };
+        let m: { type?: string; kinds?: Record<string, TrackKind>; encodeHw?: unknown; decodeHw?: unknown; };
         try { m = JSON.parse(data); } catch { return; }
+        if (m.type === "caps") {
+            const caps = { encodeHw: m.encodeHw, decodeHw: m.decodeHw };
+            if (isCaps(caps)) this.peer = caps;
+            return;
+        }
         if (m.type !== "kinds" || !m.kinds) return;
         const before = new Map(this.remoteKinds);
         this.remoteKinds = new Map(Object.entries(m.kinds));
