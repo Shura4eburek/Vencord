@@ -16,7 +16,7 @@ export type CallState =
 export type CallEvent =
     | ({ type: "dial"; video: boolean; } & Peer)
     | ({ type: "ring"; video: boolean; } & Peer)
-    | { type: "accept"; }
+    | { type: "accept"; video?: boolean; }
     | { type: "decline"; }
     | { type: "remote-accept"; callId: string; }
     | { type: "remote-decline"; callId: string; reason: "declined" | "busy"; }
@@ -106,7 +106,7 @@ export function reduce(s: CallState, e: CallEvent): Result {
                     { kind: "ringtone", on: false },
                     { kind: "clear-timers" },
                     { kind: "send", peer, msg: { type: "accept" } },
-                    { kind: "start-session", peer, video: false },
+                    { kind: "start-session", peer, video: e.video ?? false },
                     { kind: "start-timer", which: "ice", callId: s.callId },
                 ],
             };
@@ -154,4 +154,15 @@ export function reduce(s: CallState, e: CallEvent): Result {
         case "reset":
             return s.phase === "ended" ? { state: { phase: "idle" }, effects: [] } : same(s);
     }
+}
+
+/** Показывать ли область звонка в этом канале: идёт или только что завершился наш звонок */
+export function areaVisible(s: CallState, channelId: string | undefined): boolean {
+    if (!channelId || s.phase === "idle" || s.phase === "incoming") return false;
+    return s.channelId === channelId;
+}
+
+/** Входящий звонок закончился без ответа: собеседник сбросил или вышел таймаут */
+export function isMissedCall(prev: CallState, next: CallState): boolean {
+    return prev.phase === "incoming" && next.phase === "ended" && (next.reason === "no-answer" || next.reason === "remote-hangup");
 }

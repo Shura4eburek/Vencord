@@ -7,7 +7,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { CallState, isPolite, reduce } from "./state";
+import { areaVisible, CallState, isMissedCall, isPolite, reduce } from "./state";
 
 const peer = { callId: "c1", peerId: "500000000000000002", channelId: "700000000000000003" };
 const idle: CallState = { phase: "idle" };
@@ -127,4 +127,33 @@ test("accept never turns on the callee camera, even for a video ring", () => {
     const r = reduce(inc, { type: "accept" });
     const start = r.effects.find(e => e.kind === "start-session");
     assert.deepEqual(start, { kind: "start-session", peer, video: false });
+});
+
+test("accept with video starts the session with camera", () => {
+    const inc = reduce(idle, { type: "ring", video: false, ...peer }).state;
+    const r = reduce(inc, { type: "accept", video: true });
+    assert.deepEqual(r.effects.find(e => e.kind === "start-session"), { kind: "start-session", peer, video: true });
+});
+
+test("areaVisible: only active or just-ended calls of that channel", () => {
+    const out = reduce(idle, { type: "dial", video: false, ...peer }).state;
+    assert.equal(areaVisible(out, peer.channelId), true);
+    assert.equal(areaVisible(out, "other"), false);
+    assert.equal(areaVisible(out, undefined), false);
+    assert.equal(areaVisible(idle, peer.channelId), false);
+    const inc = reduce(idle, { type: "ring", video: false, ...peer }).state;
+    assert.equal(areaVisible(inc, peer.channelId), false);
+    const ended: CallState = { phase: "ended", reason: "hangup", peerId: peer.peerId, channelId: peer.channelId };
+    assert.equal(areaVisible(ended, peer.channelId), true);
+});
+
+test("isMissedCall: incoming that ended by no-answer or remote hangup", () => {
+    const inc = reduce(idle, { type: "ring", video: false, ...peer }).state;
+    const byBye = reduce(inc, { type: "remote-bye", callId: "c1" }).state;
+    const byTimeout = reduce(inc, { type: "timeout", which: "ring", callId: "c1" }).state;
+    const declined = reduce(inc, { type: "decline" }).state;
+    assert.equal(isMissedCall(inc, byBye), true);
+    assert.equal(isMissedCall(inc, byTimeout), true);
+    assert.equal(isMissedCall(inc, declined), false);
+    assert.equal(isMissedCall(idle, byBye), false);
 });
