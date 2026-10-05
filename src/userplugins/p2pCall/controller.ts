@@ -5,12 +5,14 @@
  */
 
 import { newCallId, pairHint } from "./crypto";
+import { LevelMeter } from "./levelMeter";
+import { INITIAL_AUDIO, LocalAudio, toggleDeafenState, toggleMicState } from "./localAudio";
 import { getCamera, getMic, getScreen, playStream } from "./media";
 import { startRingtone, stopRingtone } from "./ringtone";
 import { OutSignal, ScreenHint, Session, TrackKind } from "./session";
 import { relayList, settings } from "./settings";
 import { PeerCtx, Signaling,SignalMsg } from "./signaling";
-import { CallEvent, CallState, Effect, isPolite, Peer, reduce } from "./state";
+import { CallEvent, CallState, Effect, isMissedCall, isPolite, Peer, reduce } from "./state";
 import { CallStats } from "./stats";
 
 export interface View {
@@ -18,6 +20,8 @@ export interface View {
     relaysUp: number;
     remote: Partial<Record<TrackKind, MediaStream>>;
     local: { mic: boolean; cam: MediaStream | null; screen: MediaStream | null; };
+    deafened: boolean;
+    speaking: { self: boolean; peer: boolean; };
     stats: CallStats | null;
     hint: ScreenHint;
 }
@@ -27,13 +31,16 @@ interface Hooks {
     warn(text: string): void;
     inVoiceChannel(): boolean;
     dmPeers(): PeerCtx[];
+    onIncoming(): void;
+    info(text: string): void;
 }
 
 const ENDED_SHOW_MS = 3000;
 const NO_LOCAL: View["local"] = { mic: true, cam: null, screen: null };
+const NOT_SPEAKING: View["speaking"] = { self: false, peer: false };
 
 export class CallController {
-    private v: View = { call: { phase: "idle" }, relaysUp: 0, remote: {}, local: NO_LOCAL, stats: null, hint: "motion" };
+    private v: View = { call: { phase: "idle" }, relaysUp: 0, remote: {}, local: NO_LOCAL, deafened: false, speaking: NOT_SPEAKING, stats: null, hint: "motion" };
     private listeners = new Set<() => void>();
     private sig: Signaling | null = null;
     private session: Session | null = null;
@@ -47,6 +54,10 @@ export class CallController {
     private pendingSignals: OutSignal[] = [];
     private iceRestarted = false;
     private camBusy = false;
+    private audioState: LocalAudio = INITIAL_AUDIO;
+    private audioCtx: AudioContext | null = null;
+    private selfMeter: LevelMeter | null = null;
+    private peerMeter: LevelMeter | null = null;
     private hints = new Map<string, PeerCtx>();
 
     constructor(private selfId: string, private hooks: Hooks) { }
@@ -97,14 +108,29 @@ export class CallController {
         if (this.hooks.inVoiceChannel()) this.hooks.warn("Ты сейчас в голосовом канале Discord — он продолжит работать параллельно");
         this.dispatch({ type: "dial", callId: newCallId(), channelId, peerId, video });
     }
-    accept() { this.dispatch({ type: "accept" }); }
+    accept(video = false) {
+        if (this.hooks.inVoiceChannel()) this.hooks.warn("Идут два звонка: P2P и Discord");
+        this.dispatch({ type: "accept", video });
+    }
+
     decline() { this.dispatch({ type: "decline" }); }
     hangup() { this.dispatch({ type: "hangup" }); }
 
     toggleMic() {
-        const on = !this.v.local.mic;
-        this.mic?.getAudioTracks().forEach(t => { t.enabled = on; });
-        this.set({ local: { ...this.v.local, mic: on } });
+        this.audioState = toggleMicState(this.audioState);
+        this.applyAudio();
+    }
+
+    toggleDeafen() {
+        this.audioState = toggleDeafenState(this.audioState);
+        this.applyAudio();
+    }
+
+    private applyAudio() {
+        const { mic, deafened } = this.audioState;
+        this.mic?.getAudioTracks().forEach(t => { t.enabled = mic; });
+        if (this.audio) this.audio.muted = deafened;
+        this.set({ local: { ...this.v.local, mic }, deafened });
     }
 
     async toggleCam() {
@@ -173,10 +199,13 @@ export class CallController {
     }
 
     private dispatch(e: CallEvent) {
-        const { state, effects } = reduce(this.v.call, e);
-        if (state === this.v.call && !effects.length) return;
-        if (state !== this.v.call) this.set({ call: state });
+        const prev = this.v.call;
+        const { state, effects } = reduce(prev, e);
+        if (state === prev && !effects.length) return;
+        if (state !== prev) this.set({ call: state });
         for (const fx of effects) this.run(fx);
+        if (prev.phase !== "incoming" && state.phase === "incoming") this.hooks.onIncoming();
+        if (isMissedCall(prev, state)) this.hooks.info("Пропущенный P2P-звонок");
         if (state.phase === "ended" && state !== this.resetFor) {
             this.resetFor = state;
             clearTimeout(this.resetTimer);
@@ -220,6 +249,7 @@ export class CallController {
             mic = await getMic(settings.store.inputDevice);
         } catch (e) {
             this.hooks.warn("Микрофон недоступен: " + (e as Error).message);
+            this.audioState = { ...this.audioState, mic: false };
         }
         if (this.peer !== peer) { mic?.getTracks().forEach(t => t.stop()); return; }
 
@@ -231,10 +261,15 @@ export class CallController {
         this.session = session;
         if (mic) {
             // пользователь мог выключить микрофон, пока шёл захват
-            mic.getAudioTracks().forEach(t => { t.enabled = this.v.local.mic; });
+            mic.getAudioTracks().forEach(t => { t.enabled = this.audioState.mic; });
             this.mic = mic;
             await session.setTrack("mic", mic);
+            this.selfMeter?.stop();
+            this.selfMeter = new LevelMeter(this.ctx(), mic,
+                self => this.set({ speaking: { ...this.v.speaking, self } }),
+                () => this.audioState.mic && !this.audioState.deafened);
         }
+        this.applyAudio();
         for (const s of this.pendingSignals.splice(0)) session.handle(s).catch(e => console.error("[P2PCall] signal", e));
 
         this.statsTimer = setInterval(async () => {
@@ -254,17 +289,34 @@ export class CallController {
         this.mic = null;
         this.audio?.pause();
         this.audio = null;
-        this.set({ remote: {}, local: NO_LOCAL, stats: null });
+        this.selfMeter?.stop();
+        this.peerMeter?.stop();
+        this.selfMeter = this.peerMeter = null;
+        this.audioCtx?.close().catch(() => { });
+        this.audioCtx = null;
+        this.audioState = INITIAL_AUDIO;
+        this.set({ remote: {}, local: NO_LOCAL, deafened: false, speaking: NOT_SPEAKING, stats: null });
     }
 
     private onRemote(kind: TrackKind, stream: MediaStream | null) {
-        if (kind === "mic") {
+        // remoteMedia может прийти дважды для одного потока (ontrack и метки kinds) — второй раз ничего не делаем
+        if (kind === "mic" && stream !== this.peerMeter?.stream) {
             this.audio?.pause();
             this.audio = stream ? playStream(stream, settings.store.outputDevice) : null;
+            if (this.audio) this.audio.muted = this.audioState.deafened;
+            this.peerMeter?.stop();
+            this.peerMeter = stream
+                ? new LevelMeter(this.ctx(), stream, peer => this.set({ speaking: { ...this.v.speaking, peer } }), () => true)
+                : null;
+            if (!stream) this.set({ speaking: { ...this.v.speaking, peer: false } });
         }
         const remote = { ...this.v.remote };
         if (stream) remote[kind] = stream; else delete remote[kind];
         this.set({ remote });
+    }
+
+    private ctx() {
+        return this.audioCtx ??= new AudioContext();
     }
 
     private onIce(st: RTCIceConnectionState) {
