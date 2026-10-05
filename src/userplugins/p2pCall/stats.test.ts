@@ -70,3 +70,18 @@ test("no video → nulls; unknown limit → other; missing hw flag → null", ()
     const s = summarizeStats([{ type: "outbound-rtp", id: "O", kind: "video", frameWidth: 10, frameHeight: 10, framesPerSecond: 1, qualityLimitationReason: "weird" }], 0);
     assert.deepEqual(s.video.out, { width: 10, height: 10, fps: 1, codec: null, hw: null, limit: "other" });
 });
+
+test("video out/in follow the screen track ids when given, even if the camera frame is bigger", () => {
+    const r = [
+        { type: "media-source", id: "MS", kind: "video", trackIdentifier: "screen-track" },
+        { type: "media-source", id: "MC", kind: "video", trackIdentifier: "cam-track" },
+        { type: "outbound-rtp", id: "OC", kind: "video", mediaSourceId: "MC", frameWidth: 1920, frameHeight: 1080, framesPerSecond: 30, qualityLimitationReason: "none" },
+        { type: "outbound-rtp", id: "OS", kind: "video", mediaSourceId: "MS", frameWidth: 1280, frameHeight: 720, framesPerSecond: 60, qualityLimitationReason: "cpu" },
+        { type: "inbound-rtp", id: "IC", kind: "video", trackIdentifier: "peer-cam", frameWidth: 1920, frameHeight: 1080, framesPerSecond: 30 },
+        { type: "inbound-rtp", id: "IS", kind: "video", trackIdentifier: "peer-screen", frameWidth: 1280, frameHeight: 720, framesPerSecond: 120 },
+    ];
+    const s = summarizeStats(r, 0, undefined, { outTrack: "screen-track", inTrack: "peer-screen" });
+    assert.equal(s.video.out?.fps, 60);
+    assert.equal(s.video.out?.limit, "cpu");
+    assert.equal(s.video.in?.fps, 120);
+});

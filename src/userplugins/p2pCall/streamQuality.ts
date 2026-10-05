@@ -59,3 +59,9 @@ export function sanitizeQuality(raw: Partial<Record<keyof StreamQuality, unknown
         prefer: pick(raw.prefer, ["fps", "detail"] as const, DEFAULT_QUALITY.prefer),
     };
 }
+
+/** applyConstraints только уменьшает относительно исходного захвата — для повышения нужен новый захват */
+export function needsRecapture(captured: StreamQuality, next: StreamQuality): boolean {
+    const higher = captured.height !== 0 && (next.height === 0 || next.height > captured.height);
+    return higher || next.fps > captured.fps;
+}

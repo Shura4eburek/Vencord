@@ -56,7 +56,10 @@ export function tuneVideo(sdp: string): string {
         const m = lines[i].match(VIDEO_CODECS);
         if (!m) continue;
         const prefix = `a=fmtp:${m[1]} `;
-        const fmtpIdx = lines.findIndex(l => l.startsWith(prefix));
+        // с BUNDLE один и тот же PT есть в каждой m-секции — ищем fmtp только в своей
+        let end = lines.findIndex((l, j) => j > i && l.startsWith("m="));
+        if (end < 0) end = lines.length;
+        const fmtpIdx = lines.findIndex((l, j) => j > i && j < end && l.startsWith(prefix));
         if (fmtpIdx >= 0) {
             const params = new Map<string, string>();
             for (const p of lines[fmtpIdx].slice(prefix.length).split(";")) {

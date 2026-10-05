@@ -16,7 +16,7 @@ import { relayList, savedQuality, saveQuality, settings } from "./settings";
 import { PeerCtx, Signaling,SignalMsg } from "./signaling";
 import { CallEvent, CallState, Effect, isMissedCall, isPolite, Peer, reduce } from "./state";
 import { CallStats } from "./stats";
-import { StreamQuality, trackConstraints } from "./streamQuality";
+import { needsRecapture, StreamQuality, trackConstraints } from "./streamQuality";
 
 export interface View {
     call: CallState;
@@ -59,6 +59,8 @@ export class CallController {
     private camBusy = false;
     private ownCaps = probeCaps().then(c => { console.info("[P2PCall] codecs", JSON.stringify(c)); return c; });
     private screenSource: string | null = null;
+    private capturedQuality: StreamQuality | null = null;
+    private qualityQueue: Promise<void> = Promise.resolve();
     private diagTimer: ReturnType<typeof setInterval> | undefined;
     private audioState: LocalAudio = INITIAL_AUDIO;
     private audioCtx: AudioContext | null = null;
@@ -171,6 +173,7 @@ export class CallController {
             if (this.session !== session) { screen.getTracks().forEach(t => t.stop()); return; }
             screen.getVideoTracks()[0].onended = () => { this.stopScreen(); };
             this.screenSource = sourceId;
+            this.capturedQuality = q;
             await session.setScreenQuality(q);
             await session.setTrack("screen", screen);
             this.set({ local: { ...this.v.local, screen } });
@@ -183,24 +186,33 @@ export class CallController {
         if (!this.session || !this.v.local.screen) return;
         await this.session.setTrack("screen", null);
         this.screenSource = null;
+        this.capturedQuality = null;
         this.set({ local: { ...this.v.local, screen: null } });
     }
 
-    /** Смена качества на ходу: applyConstraints, при неудаче — перезахват того же источника */
-    async setScreenQuality(q: StreamQuality) {
+    /** Смена качества на ходу. Строго по очереди — иначе параллельные перезахваты теряют треки */
+    setScreenQuality(q: StreamQuality): Promise<void> {
+        const run = this.qualityQueue.then(() => this.applyScreenQuality(q));
+        this.qualityQueue = run.catch(() => { });
+        return run;
+    }
+
+    /** Понижение — applyConstraints; повышение (или отказ applyConstraints) — новый захват того же источника */
+    private async applyScreenQuality(q: StreamQuality) {
         const { session } = this;
         const stream = this.v.local.screen;
-        saveQuality(q);
-        this.set({ screenQuality: q });
-        if (!session || !stream) return;
-        const track = stream.getVideoTracks()[0];
-        const want = q.height || Infinity;
+        if (!session || !stream || !this.capturedQuality) {
+            saveQuality(q);
+            this.set({ screenQuality: q });
+            return;
+        }
         let ok = false;
-        try {
-            await track.applyConstraints(trackConstraints(q));
-            const st = track.getSettings();
-            ok = (st.height ?? 0) <= want && (st.frameRate ?? 0) <= q.fps + 1;
-        } catch { }
+        if (!needsRecapture(this.capturedQuality, q)) {
+            try {
+                await stream.getVideoTracks()[0]?.applyConstraints(trackConstraints(q));
+                ok = true;
+            } catch { }
+        }
         if (!ok && this.screenSource) {
             try {
                 const fresh = await getScreen(this.screenSource, q);
@@ -208,10 +220,16 @@ export class CallController {
                 const t = fresh.getVideoTracks()[0];
                 t.onended = () => { this.stopScreen(); };
                 await session.replaceScreenTrack(t);
+                this.capturedQuality = q;
                 ok = true;
             } catch { }
         }
-        if (!ok) this.hooks.warn("Не удалось сменить качество демки");
+        if (!ok) {
+            this.hooks.warn("Не удалось сменить качество демки");
+            return;
+        }
+        saveQuality(q);
+        this.set({ screenQuality: q });
         await session.setScreenQuality(q);
     }
 
@@ -326,6 +344,7 @@ export class CallController {
         clearInterval(this.statsTimer);
         clearInterval(this.diagTimer);
         this.screenSource = null;
+        this.capturedQuality = null;
         this.session?.close();
         this.session = null;
         this.peer = null;

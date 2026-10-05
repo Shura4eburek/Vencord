@@ -90,3 +90,22 @@ test("tuneVideo leaves audio-only SDP unchanged", () => {
     const audio = "v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\na=rtpmap:111 opus/48000/2\r\n";
     assert.equal(tuneVideo(audio), audio);
 });
+
+test("tuneVideo edits the fmtp of each m-section, not the first match in the whole SDP", () => {
+    const two = [
+        "v=0",
+        "m=video 9 UDP/TLS/RTP/SAVPF 102",
+        "a=mid:1",
+        "a=rtpmap:102 H264/90000",
+        "a=fmtp:102 profile-level-id=42e01f",
+        "m=video 9 UDP/TLS/RTP/SAVPF 102",
+        "a=mid:2",
+        "a=rtpmap:102 H264/90000",
+        "a=fmtp:102 profile-level-id=42e01f",
+        "",
+    ].join("\r\n");
+    const out = tuneVideo(two).split("\r\n");
+    const fmtps = out.filter(l => l.startsWith("a=fmtp:102 "));
+    assert.equal(fmtps.length, 2);
+    for (const f of fmtps) assert.match(f, /x-google-start-bitrate=10000;x-google-max-bitrate=80000$/);
+});

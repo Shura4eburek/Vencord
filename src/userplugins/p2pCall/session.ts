@@ -22,6 +22,8 @@ export const ICE_SERVERS: RTCIceServer[] = [
     { urls: "stun:stun.cloudflare.com:3478" },
 ];
 
+const CAM_MAX_BITRATE = 6_000_000;
+
 export interface SessionOptions { ownCaps: Promise<Caps>; codec: () => CodecChoice; }
 const tuneSdp = (sdp: string) => tuneVideo(tuneOpus(sdp, DEFAULT_OPUS));
 
@@ -104,6 +106,12 @@ export class Session {
                 const caps = RTCRtpReceiver.getCapabilities("video")?.codecs ?? [];
                 tr?.setCodecPreferences(orderCodecs(caps, this.chosen));
                 await this.applyScreenParams();
+            } else if (kind === "cam") {
+                // x-google-max-bitrate в SDP снимает лимит и с камеры — держим её отдельным потолком
+                const p = sender.getParameters();
+                if (!p.encodings?.length) p.encodings = [{}];
+                p.encodings[0].maxBitrate = CAM_MAX_BITRATE;
+                await sender.setParameters(p).catch(err => console.warn("[P2PCall] cam setParameters", err));
             }
         }
         this.sendKinds();
@@ -119,9 +127,9 @@ export class Session {
         const sender = this.senders.get("screen");
         const stream = this.local.get("screen");
         if (!sender || !stream) { track.stop(); return; }
-        const old = stream.getVideoTracks()[0];
         await sender.replaceTrack(track);
-        if (old) { stream.removeTrack(old); old.stop(); }
+        // старые треки читаем после await: параллельная замена могла успеть положить свой
+        for (const old of stream.getVideoTracks()) { stream.removeTrack(old); old.stop(); }
         stream.addTrack(track);
         await this.applyScreenParams();
     }
@@ -178,7 +186,10 @@ export class Session {
 
     async stats(): Promise<CallStats> {
         const report = await this.pc.getStats();
-        const s = summarizeStats(report.values(), performance.now(), this.prev);
+        const outTrack = this.local.get("screen")?.getVideoTracks()[0]?.id ?? null;
+        let inTrack: string | null = null;
+        for (const [id, kind] of this.remoteKinds) if (kind === "screen") inTrack = this.remoteStreams.get(id)?.getVideoTracks()[0]?.id ?? null;
+        const s = summarizeStats(report.values(), performance.now(), this.prev, { outTrack, inTrack });
         this.prev = s.counters;
         return s;
     }

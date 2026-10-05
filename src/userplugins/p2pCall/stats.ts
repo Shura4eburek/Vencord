@@ -41,7 +41,19 @@ function videoSide(r: any, byId: Map<string, any>, out: boolean): VideoSide | nu
     };
 }
 
-export function summarizeStats(reports: Iterable<any>, now: number, prev?: Counters): CallStats {
+export interface TrackIds { outTrack?: string | null; inTrack?: string | null; }
+
+/** Отправка — по треку демки (media-source.trackIdentifier), приём — по треку демки собеседника; без них — самый большой кадр */
+function pickVideo(all: any[], byId: Map<string, any>, type: string, trackId: string | null | undefined) {
+    if (trackId) {
+        const hit = all.find(r => r.type === type && r.kind === "video" && (
+            type === "inbound-rtp" ? r.trackIdentifier === trackId : byId.get(r.mediaSourceId)?.trackIdentifier === trackId));
+        if (hit) return hit;
+    }
+    return biggest(all, type);
+}
+
+export function summarizeStats(reports: Iterable<any>, now: number, prev?: Counters, ids: TrackIds = {}): CallStats {
     const byId = new Map<string, any>();
     const counters: Counters = { at: now, recvBytes: 0, sentBytes: 0, lost: 0, received: 0 };
     let pairId: string | undefined;
@@ -81,8 +93,8 @@ export function summarizeStats(reports: Iterable<any>, now: number, prev?: Count
     }
 
     const video = {
-        out: videoSide(biggest(all, "outbound-rtp"), byId, true),
-        in: videoSide(biggest(all, "inbound-rtp"), byId, false),
+        out: videoSide(pickVideo(all, byId, "outbound-rtp", ids.outTrack), byId, true),
+        in: videoSide(pickVideo(all, byId, "inbound-rtp", ids.inTrack), byId, false),
     };
 
     return { rttMs, lossPct, inKbps, outKbps, path, counters, video };

@@ -7,7 +7,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { captureConstraints, DEFAULT_QUALITY, encoderParams, fpsAllowed, heightLabel, hzFromIntervals, sanitizeQuality, trackConstraints } from "./streamQuality";
+import { captureConstraints, DEFAULT_QUALITY, encoderParams, fpsAllowed, heightLabel, hzFromIntervals, needsRecapture, sanitizeQuality, trackConstraints } from "./streamQuality";
 
 test("defaults: source resolution, 60 fps, 20 Mbps, keep fps", () => {
     assert.deepEqual(DEFAULT_QUALITY, { height: 0, fps: 60, maxMbps: 20, prefer: "fps" });
@@ -52,4 +52,14 @@ test("labels", () => {
 test("sanitize falls back per field on garbage", () => {
     assert.deepEqual(sanitizeQuality({ height: 1440, fps: 120, maxMbps: 80, prefer: "detail" }), { height: 1440, fps: 120, maxMbps: 80, prefer: "detail" });
     assert.deepEqual(sanitizeQuality({ height: 999, fps: "x", maxMbps: undefined, prefer: 5 }), DEFAULT_QUALITY);
+});
+
+test("needsRecapture: raising resolution or fps needs a new capture, lowering does not", () => {
+    const at = (height: 720 | 1080 | 1440 | 0, fps: 30 | 60 | 120 | 144) => ({ height, fps, maxMbps: 20 as const, prefer: "fps" as const });
+    assert.equal(needsRecapture(at(1080, 60), at(0, 60)), true);
+    assert.equal(needsRecapture(at(720, 60), at(1440, 60)), true);
+    assert.equal(needsRecapture(at(1080, 60), at(1080, 144)), true);
+    assert.equal(needsRecapture(at(1440, 120), at(720, 30)), false);
+    assert.equal(needsRecapture(at(0, 60), at(1440, 60)), false);
+    assert.equal(needsRecapture(at(0, 60), at(0, 60)), false);
 });
