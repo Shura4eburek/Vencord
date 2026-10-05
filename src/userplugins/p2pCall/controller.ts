@@ -264,6 +264,8 @@ export class CallController {
             mic.getAudioTracks().forEach(t => { t.enabled = this.audioState.mic; });
             this.mic = mic;
             await session.setTrack("mic", mic);
+            // пока ставился трек, звонок могли завершить — тогда ничего не запускаем
+            if (this.session !== session) return;
             this.selfMeter?.stop();
             this.selfMeter = new LevelMeter(this.ctx(), mic,
                 self => this.set({ speaking: { ...this.v.speaking, self } }),

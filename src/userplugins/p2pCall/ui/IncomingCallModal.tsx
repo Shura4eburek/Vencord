@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import ErrorBoundary from "@components/ErrorBoundary";
 import { RenderModalProps } from "@vencord/discord-types";
 import { Modal, openModal, useEffect, UserStore } from "@webpack/common";
 
@@ -19,9 +20,12 @@ function IncomingCall({ c, modal }: { c: CallController; modal: RenderModalProps
 
     const user = UserStore.getUser(call.peerId);
     const name = user?.globalName ?? user?.username ?? call.peerId;
+    // крестик/Esc/клик мимо — иначе звонок остаётся входящим, а ответить уже негде
+    const dismiss = () => { if (c.view.call.phase === "incoming") c.decline(); modal.onClose(); };
     return (
         <Modal
             {...modal}
+            onClose={dismiss}
             title="Входящий P2P-звонок"
             subtitle={call.video ? `${name} звонит с видео` : `${name} звонит`}
             actions={[
@@ -38,5 +42,9 @@ function IncomingCall({ c, modal }: { c: CallController; modal: RenderModalProps
 }
 
 export function openIncomingCall(c: CallController) {
-    openModal(modal => <IncomingCall c={c} modal={modal} />);
+    openModal(modal => (
+        <ErrorBoundary>
+            <IncomingCall c={c} modal={modal} />
+        </ErrorBoundary>
+    ));
 }
