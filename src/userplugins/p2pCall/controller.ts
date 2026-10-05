@@ -340,7 +340,7 @@ export class CallController {
 
         this.diagTimer = setInterval(() => {
             if (this.session !== session || this.v.call.phase !== "connected" || !settings.store.diagLog || !this.v.stats) return;
-            console.info("[P2PCall] stats", JSON.stringify({ ...compactStats(this.v.stats), screenCodec: session.screenCodec(), quality: this.v.screenQuality, capture: captureInfo(this.v.local.screen) }));
+            console.info("[P2PCall] stats", JSON.stringify({ ...compactStats(this.v.stats), screenCodec: session.screenCodec(), quality: this.v.screenQuality, capture: captureInfo(this.v.local.screen), encoder: session.screenEncoding() }));
         }, 5000);
 
         if (video && this.session === session) await this.toggleCam();

@@ -7,7 +7,8 @@
 export type PathType = "host" | "srflx" | "relay" | "unknown";
 export interface Counters { at: number; recvBytes: number; sentBytes: number; lost: number; received: number; }
 export type Limit = "none" | "cpu" | "bandwidth" | "other";
-export interface VideoSide { width: number; height: number; fps: number; codec: string | null; hw: boolean | null; limit: Limit | null; }
+/** srcFps — сколько кадров отдаёт захват кодеру (media-source); fps — сколько кодер отправляет */
+export interface VideoSide { width: number; height: number; fps: number; codec: string | null; hw: boolean | null; limit: Limit | null; srcFps: number | null; }
 export interface CallStats {
     rttMs: number | null; lossPct: number; inKbps: number; outKbps: number; path: PathType; counters: Counters;
     video: { out: VideoSide | null; in: VideoSide | null; };
@@ -38,6 +39,7 @@ function videoSide(r: any, byId: Map<string, any>, out: boolean): VideoSide | nu
         codec: byId.get(r.codecId)?.mimeType ?? null,
         hw: typeof hwFlag === "boolean" ? hwFlag : null,
         limit: out ? (LIMITS.includes(r.qualityLimitationReason) ? r.qualityLimitationReason : "other") : null,
+        srcFps: out && typeof byId.get(r.mediaSourceId)?.framesPerSecond === "number" ? Math.round(byId.get(r.mediaSourceId).framesPerSecond) : null,
     };
 }
 

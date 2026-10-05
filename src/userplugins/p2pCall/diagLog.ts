@@ -16,6 +16,7 @@ function videoLine(v: VideoSide | null): string | null {
     if (v.codec) parts.push(short(v.codec)!);
     if (v.hw !== null) parts.push(v.hw ? "hw" : "sw");
     if (v.limit) parts.push(`limit=${v.limit}`);
+    if (v.srcFps !== null) parts.push(`src=${v.srcFps}fps`);
     return parts.join(" ");
 }
 

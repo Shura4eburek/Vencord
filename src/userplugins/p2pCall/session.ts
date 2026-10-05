@@ -136,6 +136,12 @@ export class Session {
 
     screenCodec() { return this.senders.has("screen") ? this.chosen : null; }
 
+    /** Что реально стоит у кодера после setParameters — для диагностики потолков FPS/битрейта */
+    screenEncoding() {
+        const e = this.senders.get("screen")?.getParameters().encodings?.[0];
+        return e ? { maxFramerate: e.maxFramerate ?? null, maxBitrate: e.maxBitrate ?? null } : null;
+    }
+
     private async applyScreenParams() {
         const sender = this.senders.get("screen");
         if (!sender?.track) return;
