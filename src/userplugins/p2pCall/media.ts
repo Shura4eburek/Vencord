@@ -6,7 +6,7 @@
 
 import { PluginNative } from "@utils/types";
 
-import { captureConstraints, displayMediaConstraints, StreamQuality, usesDisplayMedia } from "./streamQuality";
+import { captureConstraints, displayMediaConstraints, StreamQuality } from "./streamQuality";
 
 const Native = VencordNative.pluginHelpers.P2PCall as PluginNative<typeof import("./native")>;
 
@@ -24,15 +24,13 @@ export function getCamera(deviceId: string) {
     });
 }
 
-/** До 60 FPS — legacy-захват; выше — getDisplayMedia через наш обработчик, при отказе откат на legacy */
+/** getDisplayMedia через наш обработчик (стабильные 60 FPS); при отказе — legacy-захват */
 export async function getScreen(sourceId: string, q: StreamQuality): Promise<MediaStream> {
-    if (usesDisplayMedia(q)) {
-        try {
-            await Native.prepareDisplayMedia(sourceId);
-            return await navigator.mediaDevices.getDisplayMedia({ audio: false, video: displayMediaConstraints(q) });
-        } catch (e) {
-            console.warn("[P2PCall] getDisplayMedia failed, falling back to legacy capture", e);
-        }
+    try {
+        await Native.prepareDisplayMedia(sourceId);
+        return await navigator.mediaDevices.getDisplayMedia({ audio: false, video: displayMediaConstraints(q) });
+    } catch (e) {
+        console.warn("[P2PCall] getDisplayMedia failed, falling back to legacy capture", e);
     }
     return navigator.mediaDevices.getUserMedia({
         audio: false,

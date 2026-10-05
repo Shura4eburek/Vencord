@@ -5,13 +5,14 @@
  */
 
 export type Height = 720 | 1080 | 1440 | 0;
-export type Fps = 30 | 60 | 120 | 144;
+// выше 60 захват экрана Windows в Chromium (WGC) не отдаёт — проверено замерами в Discord и Chrome
+export type Fps = 30 | 60;
 export type MaxMbps = 10 | 20 | 40 | 80;
 export type Prefer = "fps" | "detail";
 export interface StreamQuality { height: Height; fps: Fps; maxMbps: MaxMbps; prefer: Prefer; }
 
 export const HEIGHTS: readonly Height[] = [720, 1080, 1440, 0];
-export const FPS_OPTIONS: readonly Fps[] = [30, 60, 120, 144];
+export const FPS_OPTIONS: readonly Fps[] = [30, 60];
 export const MBPS_OPTIONS: readonly MaxMbps[] = [10, 20, 40, 80];
 export const DEFAULT_QUALITY: StreamQuality = { height: 0, fps: 60, maxMbps: 20, prefer: "fps" };
 
@@ -30,9 +31,7 @@ export function captureConstraints(q: StreamQuality) {
     return { maxWidth: MAX_W, maxHeight: q.height || MAX_H, minFrameRate: fps, maxFrameRate: fps };
 }
 
-/** Выше 60 FPS legacy-захват не умеет — пробуем getDisplayMedia */
-export const usesDisplayMedia = (q: StreamQuality) => q.fps > LEGACY_MAX_FPS;
-
+/** Основной путь захвата — getDisplayMedia: на 1440p держит 60, legacy-захват давал ~44 */
 export function displayMediaConstraints(q: StreamQuality): MediaTrackConstraints {
     const frameRate = { ideal: q.fps, max: q.fps };
     return q.height ? { height: { max: q.height }, frameRate } : { frameRate };
