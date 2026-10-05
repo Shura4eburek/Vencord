@@ -7,7 +7,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { DEFAULT_OPUS, tuneOpus } from "./sdp";
+import { DEFAULT_OPUS, tuneOpus, tuneVideo } from "./sdp";
 
 const SDP = [
     "v=0",
@@ -54,4 +54,39 @@ test("sdp without opus is returned unchanged", () => {
 
 test("sdp keeps trailing CRLF", () => {
     assert.ok(tuneOpus(SDP, DEFAULT_OPUS).endsWith("\r\n"));
+});
+
+const VSDP = [
+    "v=0",
+    "m=audio 9 UDP/TLS/RTP/SAVPF 111",
+    "a=rtpmap:111 opus/48000/2",
+    "a=fmtp:111 minptime=10;useinbandfec=1",
+    "m=video 9 UDP/TLS/RTP/SAVPF 96 97 45 102",
+    "a=rtpmap:96 VP8/90000",
+    "a=rtpmap:97 rtx/90000",
+    "a=fmtp:97 apt=96",
+    "a=rtpmap:45 AV1/90000",
+    "a=fmtp:45 level-idx=5;profile=0;tier=0",
+    "a=rtpmap:102 H264/90000",
+    "a=fmtp:102 level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42001f",
+    "",
+].join("\r\n");
+
+test("tuneVideo sets start/max bitrate on video codecs only", () => {
+    const out = tuneVideo(VSDP);
+    assert.match(out, /a=fmtp:45 level-idx=5;profile=0;tier=0;x-google-start-bitrate=10000;x-google-max-bitrate=80000\r\n/);
+    assert.match(out, /a=fmtp:102 [^\r]*x-google-start-bitrate=10000;x-google-max-bitrate=80000\r\n/);
+    assert.match(out, /a=rtpmap:96 VP8\/90000\r\na=fmtp:96 x-google-start-bitrate=10000;x-google-max-bitrate=80000\r\n/);
+    assert.match(out, /a=fmtp:97 apt=96\r\n/);
+    assert.match(out, /a=fmtp:111 minptime=10;useinbandfec=1\r\n/);
+});
+
+test("tuneVideo is idempotent", () => {
+    const once = tuneVideo(VSDP);
+    assert.equal(tuneVideo(once), once);
+});
+
+test("tuneVideo leaves audio-only SDP unchanged", () => {
+    const audio = "v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\na=rtpmap:111 opus/48000/2\r\n";
+    assert.equal(tuneVideo(audio), audio);
 });

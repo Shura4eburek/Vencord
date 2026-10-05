@@ -43,3 +43,32 @@ export function tuneOpus(sdp: string, t: OpusTuning): string {
 
     return lines.join("\r\n");
 }
+
+export const VIDEO_START_KBPS = 10_000;
+export const VIDEO_MAX_KBPS = 80_000;
+const VIDEO_CODECS = /^a=rtpmap:(\d+) (AV1|H264|VP9|VP8)\/90000/i;
+
+/** Стартовый и предельный битрейт для видео: без них WebRTC разгоняется с ~300 кбит/с несколько секунд */
+export function tuneVideo(sdp: string): string {
+    const lines = sdp.split("\r\n");
+    const want: [string, string][] = [["x-google-start-bitrate", String(VIDEO_START_KBPS)], ["x-google-max-bitrate", String(VIDEO_MAX_KBPS)]];
+    for (let i = 0; i < lines.length; i++) {
+        const m = lines[i].match(VIDEO_CODECS);
+        if (!m) continue;
+        const prefix = `a=fmtp:${m[1]} `;
+        const fmtpIdx = lines.findIndex(l => l.startsWith(prefix));
+        if (fmtpIdx >= 0) {
+            const params = new Map<string, string>();
+            for (const p of lines[fmtpIdx].slice(prefix.length).split(";")) {
+                if (!p) continue;
+                const [k, v = ""] = p.split("=");
+                params.set(k.trim(), v.trim());
+            }
+            for (const [k, v] of want) params.set(k, v);
+            lines[fmtpIdx] = prefix + [...params].map(([k, v]) => `${k}=${v}`).join(";");
+        } else {
+            lines.splice(i + 1, 0, prefix + want.map(([k, v]) => `${k}=${v}`).join(";"));
+        }
+    }
+    return lines.join("\r\n");
+}
