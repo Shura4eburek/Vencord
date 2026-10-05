@@ -20,6 +20,7 @@ import { CallAreaSlot } from "./ui/CallArea";
 import { ConnectedPanel } from "./ui/ConnectedPanel";
 import { HeaderCallButton } from "./ui/HeaderCallButton";
 import { openIncomingCall } from "./ui/IncomingCallModal";
+import { startUpdater, stopUpdater } from "./updater";
 
 const VoiceActions = findByPropsLazy("selectVoiceChannel", "selectChannel");
 
@@ -80,9 +81,11 @@ export default definePlugin({
         });
         controller = c;
         c.start();
+        startUpdater(() => settings.store.autoUpdate);
     },
 
     stop() {
+        stopUpdater();
         controller?.stop();
         controller = null;
     },

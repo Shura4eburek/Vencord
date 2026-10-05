@@ -9,6 +9,7 @@ import { OptionType } from "@utils/types";
 
 import { DEFAULT_QUALITY, sanitizeQuality, StreamQuality } from "./streamQuality";
 import { DeviceSelect } from "./ui/DeviceSelect";
+import { CheckNowButton } from "./updater";
 
 export const DEFAULT_RELAYS = "wss://relay.damus.io, wss://nos.lol, wss://nostr.mom";
 
@@ -42,6 +43,11 @@ export const settings = definePluginSettings({
     screenFps: { type: OptionType.NUMBER, description: "", default: DEFAULT_QUALITY.fps, hidden: true },
     screenMaxMbps: { type: OptionType.NUMBER, description: "", default: DEFAULT_QUALITY.maxMbps, hidden: true },
     screenPrefer: { type: OptionType.STRING, description: "", default: DEFAULT_QUALITY.prefer, hidden: true },
+    autoUpdate: { type: OptionType.BOOLEAN, description: "Автообновление плагина из релизов GitHub", default: true },
+    checkUpdate: {
+        type: OptionType.COMPONENT, description: "Проверить обновление сейчас",
+        component: () => <CheckNowButton />,
+    },
     showStats: { type: OptionType.BOOLEAN, description: "Показывать пинг, потери и тип канала", default: true },
 });
 
