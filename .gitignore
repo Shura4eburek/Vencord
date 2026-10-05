@@ -23,3 +23,12 @@ src/userplugins
 
 ExtensionCache/
 /settings
+
+# P2PCall: локальные рабочие и личные файлы
+.superpowers/
+*.pem
+*.key
+.p2pcall/
+*.zip
+/_*.ts
+discord-bundle/

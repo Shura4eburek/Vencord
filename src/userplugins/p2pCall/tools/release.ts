@@ -51,7 +51,7 @@ writeFileSync(join(work, "manifest.sig"), sign(null, manifest, key));
 
 // установочный архив: шаблон + файлы сборки + установщик Vencord
 const pkg = join(work, "P2PCall-Vencord");
-cpSync(PACKAGE_TEMPLATE, pkg, { recursive: true });
+cpSync(PACKAGE_TEMPLATE, pkg, { recursive: true, filter: src => !src.endsWith(".gitattributes") });
 mkdirSync(join(pkg, "dist", "Installer"), { recursive: true });
 for (const name of [...UPDATE_FILES, VERSION_FILE]) copyFileSync(join(DIST, name), join(pkg, "dist", name));
 copyFileSync(join(DIST, "Installer", "VencordInstallerCli.exe"), join(pkg, "dist", "Installer", "VencordInstallerCli.exe"));
