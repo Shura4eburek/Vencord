@@ -182,9 +182,15 @@ export class PortMapping {
     }
 }
 
+/**
+ * Тело — одним куском с Content-Length: без него Node шлёт chunked, а miniupnpd (ASUS) такое тело не читает
+ * и отвечает 402 Invalid Args (замер 18.10).
+ */
 export function httpRequest(url: string, init: HttpInit): Promise<HttpResponse> {
+    const body = init.body === undefined ? undefined : Buffer.from(init.body, "utf8");
+    const headers = body ? { ...init.headers, "Content-Length": String(body.length) } : init.headers;
     return new Promise((resolve, reject) => {
-        const req = http.request(url, { method: init.method, headers: init.headers, timeout: init.timeoutMs }, res => {
+        const req = http.request(url, { method: init.method, headers, timeout: init.timeoutMs }, res => {
             const chunks: Buffer[] = [];
             res.on("data", c => chunks.push(c));
             res.on("end", () => resolve({ status: res.statusCode ?? 0, body: Buffer.concat(chunks).toString("utf8") }));
@@ -192,7 +198,6 @@ export function httpRequest(url: string, init: HttpInit): Promise<HttpResponse> 
         });
         req.on("timeout", () => req.destroy(new Error("timeout")));
         req.on("error", reject);
-        if (init.body) req.write(init.body);
-        req.end();
+        req.end(body);
     });
 }

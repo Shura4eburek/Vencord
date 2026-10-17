@@ -6,9 +6,10 @@
 
 import assert from "node:assert/strict";
 import dgram from "node:dgram";
+import http from "node:http";
 import { test } from "node:test";
 
-import { addPortMapping, discoverIgd, HttpInit, HttpResponse, Igd, parseIgd, parseSsdpLocation, PortMapping, soapErrorCode, UpnpDeps } from "./upnp";
+import { addPortMapping, discoverIgd, HttpInit, httpRequest, HttpResponse, Igd, parseIgd, parseSsdpLocation, PortMapping, soapErrorCode, UpnpDeps } from "./upnp";
 
 const LOC = "http://192.168.50.1:5431/rootDesc.xml";
 const IGD_XML = `<?xml version="1.0"?><root><device><deviceList><device><serviceList>
@@ -98,4 +99,21 @@ test("discoverIgd: answer from a fake router on loopback → IGD; silence → nu
     await new Promise<void>(r => silent.bind(0, "127.0.0.1", () => r()));
     assert.equal(await discoverIgd("127.0.0.1", d, 300, ["127.0.0.1", silent.address().port]), null);
     silent.close();
+});
+
+test("httpRequest sends the SOAP body with Content-Length, not chunked", async () => {
+    let seen: http.IncomingHttpHeaders = {}, got = "";
+    const srv = http.createServer((req, res) => {
+        seen = req.headers;
+        req.on("data", c => { got += c; });
+        req.on("end", () => res.end("ok"));
+    });
+    await new Promise<void>(r => srv.listen(0, "127.0.0.1", () => r()));
+    const body = "<s:Envelope>порт</s:Envelope>";
+    const r = await httpRequest(`http://127.0.0.1:${(srv.address() as any).port}/ctl`, { method: "POST", body, timeoutMs: 2000 });
+    srv.close();
+    assert.equal(r.status, 200);
+    assert.equal(seen["transfer-encoding"], undefined);
+    assert.equal(seen["content-length"], String(Buffer.byteLength(body)));
+    assert.equal(got, body);
 });
