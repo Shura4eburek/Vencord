@@ -55,19 +55,18 @@ interface CallTunnel {
     callId: string;
     info: TunnelPrepared | null;
     sent: boolean;
-    peer: { addr: string | null; token: string; upnp: string; } | null;
+    peer: { addr: string | null; token: string; upnp: string; upnpCode: number | null; } | null;
     linked: boolean;
 }
 
 /** Подсказка к «P2P-звонок не удался»: туннель упирается в UPnP на роутере той стороны, где он выключен */
 export function tunnelHint(t: Pick<CallTunnel, "info" | "peer"> | null): string | null {
     if (!t) return null;
-    const own = t.info !== null && t.info.upnp !== "ok";
-    const peer = t.peer !== null && t.peer.upnp !== "ok";
-    if (own && peer) return "UPnP выключен на роутере у обоих — включите его, чтобы P2P пробивался";
-    if (own) return "Включи UPnP на роутере — без него прямое соединение может не пробиться";
-    if (peer) return "У собеседника на роутере выключен UPnP";
-    return null;
+    const side = (upnp: string) => upnp === "error" ? "роутер отказал в пробросе порта" : "UPnP на роутере не отвечает";
+    const own = t.info && t.info.upnp !== "ok" ? `у тебя ${side(t.info.upnp)}` : null;
+    const peer = t.peer && t.peer.upnp !== "ok" ? `у собеседника ${side(t.peer.upnp)}` : null;
+    if (!own && !peer) return null;
+    return `Порт для прямого соединения не открылся: ${[own, peer].filter(Boolean).join(", ")}`;
 }
 
 const NO_LOCAL: View["local"] = { mic: true, cam: null, screen: null };
@@ -421,7 +420,7 @@ export class CallController {
         Native.tunnelPrepare(callId).then(info => {
             if (this.tun !== t) return;
             t.info = info;
-            console.info("[P2PCall] tunnel", JSON.stringify(info ? { addr: info.addr, upnp: info.upnp, lanIp: info.lanIp, proxyPort: info.proxyPort } : { failed: true }));
+            console.info("[P2PCall] tunnel", JSON.stringify(info ? { addr: info.addr, upnp: info.upnp, upnpCode: info.upnpCode, lanIp: info.lanIp, proxyPort: info.proxyPort } : { failed: true }));
             this.sendTun();
             this.linkTunnel();
         }, e => console.warn("[P2PCall] tunnel", e));
@@ -432,14 +431,14 @@ export class CallController {
         const t = this.tun, { peer } = this;
         if (!t?.info || t.sent || !this.session || peer?.callId !== t.callId) return;
         t.sent = true;
-        this.sig?.send(peer, t.callId, { type: "tun", addr: t.info.addr, token: t.info.token, upnp: t.info.upnp });
+        this.sig?.send(peer, t.callId, { type: "tun", addr: t.info.addr, token: t.info.token, upnp: t.info.upnp, upnpCode: t.info.upnpCode });
     }
 
     private onTun(m: SignalMsg) {
         const t = this.tun;
         if (!t || m.callId !== t.callId || typeof m.token !== "string") return;
-        t.peer = { addr: typeof m.addr === "string" ? m.addr : null, token: m.token, upnp: typeof m.upnp === "string" ? m.upnp : "error" };
-        console.info("[P2PCall] tunnel peer", JSON.stringify({ addr: t.peer.addr, upnp: t.peer.upnp }));
+        t.peer = { addr: typeof m.addr === "string" ? m.addr : null, token: m.token, upnp: typeof m.upnp === "string" ? m.upnp : "error", upnpCode: typeof m.upnpCode === "number" ? m.upnpCode : null };
+        console.info("[P2PCall] tunnel peer", JSON.stringify({ addr: t.peer.addr, upnp: t.peer.upnp, upnpCode: t.peer.upnpCode }));
         this.linkTunnel();
     }
 

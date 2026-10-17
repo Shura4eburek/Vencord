@@ -58,6 +58,15 @@ test("725 OnlyPermanentLeasesSupported → retried with lease 0", async () => {
     assert.equal(calls.length, 2);
 });
 
+test("any refusal except a port conflict is retried as a permanent mapping", async () => {
+    const { d, calls } = fakeHttp((_, init) => init.body!.includes("<NewLeaseDuration>600<") ? fault(402) : { status: 200, body: "" });
+    assert.deepEqual(await addPortMapping(IGD, 40123, "192.168.50.143", d), { ok: true, lease: 0 });
+    assert.equal(calls.length, 2);
+    const conflict = fakeHttp(() => fault(718));
+    assert.deepEqual(await addPortMapping(IGD, 40123, "192.168.50.143", conflict.d), { ok: false, code: 718 });
+    assert.equal(conflict.calls.length, 1);
+});
+
 test("PortMapping.create maps 718 to conflict, other faults to error, no IGD to no-igd", async () => {
     assert.deepEqual(await PortMapping.create(IGD, 1, "x", fakeHttp(() => fault(718)).d), { status: "conflict" });
     assert.deepEqual(await PortMapping.create(IGD, 1, "x", fakeHttp(() => fault(501)).d), { status: "error", code: 501 });

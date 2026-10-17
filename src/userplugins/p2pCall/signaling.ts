@@ -17,7 +17,7 @@ export interface SignalMsg {
     type: SignalType; msgId: string; callId: string; from: string; ts: number;
     channelId?: string; video?: boolean; sdp?: string; candidate?: RTCIceCandidateInit | null; reason?: string;
     /** tun: адрес туннеля этой стороны (specs/001-udp-tunnel-upnp/contracts/tunnel.md §1) */
-    addr?: string | null; token?: string; upnp?: string;
+    addr?: string | null; token?: string; upnp?: string; upnpCode?: number | null;
 }
 export interface PeerCtx { channelId: string; peerId: string; }
 export interface SignalingOptions {

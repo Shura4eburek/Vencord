@@ -80,7 +80,8 @@ export function relaunch(_: IpcMainInvokeEvent) {
 // ── UDP-туннель (specs/001-udp-tunnel-upnp/contracts/tunnel.md §2) ──
 
 export type { TunnelStatus };
-export interface TunnelPrepared { addr: string | null; token: string; upnp: "ok" | "no-igd" | "error"; lanIp: string; proxyPort: number; }
+/** upnpCode — код отказа роутера (SOAP errorCode, −HTTP-статус) или null: по нему видно, почему не открылся порт */
+export interface TunnelPrepared { addr: string | null; token: string; upnp: "ok" | "no-igd" | "error"; upnpCode: number | null; lanIp: string; proxyPort: number; }
 interface ActiveTunnel { callId: string; ready: Promise<TunnelPrepared | null>; tunnel?: Tunnel; mapping?: PortMapping; closed: boolean; }
 
 const PORT_BASE = 40000;
@@ -146,7 +147,7 @@ async function buildTunnel(a: ActiveTunnel): Promise<TunnelPrepared | null> {
         }
         a.tunnel = t;
         if (m.status === "ok") { a.mapping = m.mapping; rememberMapping(m.mapping); }
-        return { addr, token: token.toString("hex"), upnp: m.status, lanIp, proxyPort: t.proxyPort };
+        return { addr, token: token.toString("hex"), upnp: m.status, upnpCode: m.status === "error" ? m.code : null, lanIp, proxyPort: t.proxyPort };
     }
     return null;
 }

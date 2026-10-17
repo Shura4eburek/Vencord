@@ -30,7 +30,6 @@ export const DESCRIPTION = "P2PCall";
 export const LEASE_SEC = 600;
 const RENEW_MS = 5 * 60_000;
 const ERR_CONFLICT = 718;
-const ERR_ONLY_PERMANENT = 725;
 const ERR_NO_SUCH_ENTRY = 714;
 
 export function parseSsdpLocation(msg: string): string | null {
@@ -125,7 +124,10 @@ async function soap(igd: Igd, action: string, args: [string, string | number][],
 
 export type MapResult = { ok: true; lease: number; } | { ok: false; code: number | null; };
 
-/** Порт снаружи = порт внутри; 725 — роутер не умеет срок жизни, ставим постоянный и снимаем сами */
+/**
+ * Порт снаружи = порт внутри. Отказ со сроком жизни (725 OnlyPermanentLeasesSupported, а у части роутеров
+ * 402/501 на тот же случай) — повтор с постоянным пробросом, его снимаем сами. Конфликт порта — не повторяем.
+ */
 export async function addPortMapping(igd: Igd, port: number, lanIp: string, d: UpnpDeps, lease = LEASE_SEC): Promise<MapResult> {
     const args = (l: number): [string, string | number][] => [
         ["NewRemoteHost", ""], ["NewExternalPort", port], ["NewProtocol", "UDP"], ["NewInternalPort", port],
@@ -133,7 +135,7 @@ export async function addPortMapping(igd: Igd, port: number, lanIp: string, d: U
     ];
     try {
         let code = await soap(igd, "AddPortMapping", args(lease), d);
-        if (code === ERR_ONLY_PERMANENT && lease) {
+        if (code !== null && code !== ERR_CONFLICT && lease) {
             lease = 0;
             code = await soap(igd, "AddPortMapping", args(0), d);
         }
