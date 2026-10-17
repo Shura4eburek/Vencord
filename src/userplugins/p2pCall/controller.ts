@@ -4,12 +4,15 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { PluginNative } from "@utils/types";
+
 import { CodecChoice, probeCaps } from "./codecs";
 import { newCallId, pairHint } from "./crypto";
 import { compactStats } from "./diagLog";
 import { LevelMeter } from "./levelMeter";
 import { INITIAL_AUDIO, LocalAudio, toggleDeafenState, toggleMicState } from "./localAudio";
 import { getCamera, getMic, getScreen, playStream } from "./media";
+import type { TunnelPrepared } from "./native";
 import { startRingtone, stopRingtone } from "./ringtone";
 import { OutSignal, Session, TrackKind } from "./session";
 import { relayList, savedQuality, saveQuality, settings } from "./settings";
@@ -17,6 +20,8 @@ import { PeerCtx, Signaling,SignalMsg } from "./signaling";
 import { CallEvent, CallState, Effect, isMissedCall, isPolite, Peer, reduce } from "./state";
 import { CallStats } from "./stats";
 import { needsRecapture, StreamQuality, trackConstraints } from "./streamQuality";
+
+const Native = VencordNative.pluginHelpers.P2PCall as PluginNative<typeof import("./native")>;
 
 export interface View {
     call: CallState;
@@ -30,7 +35,7 @@ export interface View {
 }
 
 interface Hooks {
-    offerFallback(channelId: string): void;
+    offerFallback(channelId: string, hint: string | null): void;
     warn(text: string): void;
     inVoiceChannel(): boolean;
     dmPeers(): PeerCtx[];
@@ -45,6 +50,26 @@ function captureInfo(stream: MediaStream | null) {
     const s = stream?.getVideoTracks()[0]?.getSettings();
     return s ? `${s.width}x${s.height}@${Math.round(s.frameRate ?? 0)} ${s.displaySurface ?? "legacy"}` : null;
 }
+/** Туннель звонка: своя сторона (info) и что прислал собеседник в `tun` */
+interface CallTunnel {
+    callId: string;
+    info: TunnelPrepared | null;
+    sent: boolean;
+    peer: { addr: string | null; token: string; upnp: string; } | null;
+    linked: boolean;
+}
+
+/** Подсказка к «P2P-звонок не удался»: туннель упирается в UPnP на роутере той стороны, где он выключен */
+export function tunnelHint(t: Pick<CallTunnel, "info" | "peer"> | null): string | null {
+    if (!t) return null;
+    const own = t.info !== null && t.info.upnp !== "ok";
+    const peer = t.peer !== null && t.peer.upnp !== "ok";
+    if (own && peer) return "UPnP выключен на роутере у обоих — включите его, чтобы P2P пробивался";
+    if (own) return "Включи UPnP на роутере — без него прямое соединение может не пробиться";
+    if (peer) return "У собеседника на роутере выключен UPnP";
+    return null;
+}
+
 const NO_LOCAL: View["local"] = { mic: true, cam: null, screen: null };
 const NOT_SPEAKING: View["speaking"] = { self: false, peer: false };
 
@@ -73,6 +98,9 @@ export class CallController {
     private selfMeter: LevelMeter | null = null;
     private peerMeter: LevelMeter | null = null;
     private hints = new Map<string, PeerCtx>();
+    private tun: CallTunnel | null = null;
+    /** Туннель только что закрытого звонка — для подсказки в offer-fallback, который идёт после leave-room */
+    private lastTun: CallTunnel | null = null;
 
     constructor(private selfId: string, private hooks: Hooks) { }
 
@@ -104,6 +132,7 @@ export class CallController {
         if (this.v.call.phase !== "idle" && this.v.call.phase !== "ended") this.dispatch({ type: "hangup" });
         clearTimeout(this.resetTimer);
         this.run({ kind: "clear-timers" });
+        this.closeTunnel();
         this.sig?.stop();
         this.sig = null;
     }
@@ -247,6 +276,7 @@ export class CallController {
             case "accept": this.dispatch({ type: "remote-accept", callId: m.callId }); return;
             case "decline": this.dispatch({ type: "remote-decline", callId: m.callId, reason: m.reason === "busy" ? "busy" : "declined" }); return;
             case "bye": this.dispatch({ type: "remote-bye", callId: m.callId }); return;
+            case "tun": this.onTun(m); return;
             case "offer": case "answer": case "ice": {
                 const { call } = this.v;
                 if (!("callId" in call) || m.callId !== call.callId) return;
@@ -263,6 +293,8 @@ export class CallController {
         if (state === prev && !effects.length) return;
         if (state !== prev) this.set({ call: state });
         for (const fx of effects) this.run(fx);
+        // звонящий — сразу, принимающий — только после «Принять»: входящий звонок не открывает порт на роутере
+        if ((state.phase === "outgoing" || state.phase === "connecting") && this.tun?.callId !== state.callId) this.prepareTunnel(state.callId);
         if (prev.phase !== "incoming" && state.phase === "incoming") this.hooks.onIncoming();
         if (isMissedCall(prev, state)) this.hooks.info("Пропущенный P2P-звонок");
         if (state.phase === "ended" && state !== this.resetFor) {
@@ -275,7 +307,10 @@ export class CallController {
     private run(fx: Effect) {
         switch (fx.kind) {
             case "join-room": this.sig?.joinCall(fx.peer.callId, fx.peer); return;
-            case "leave-room": this.sig?.leaveCall(fx.callId); return;
+            case "leave-room":
+                this.sig?.leaveCall(fx.callId);
+                if (fx.callId === this.tun?.callId) this.closeTunnel();
+                return;
             case "send-ring":
                 this.sig?.send(fx.peer, fx.peer.callId, { type: "ring", channelId: fx.peer.channelId, video: fx.video });
                 return;
@@ -292,7 +327,12 @@ export class CallController {
                 this.timers = [];
                 return;
             case "ringtone": fx.on ? startRingtone() : stopRingtone(); return;
-            case "offer-fallback": this.hooks.offerFallback(fx.channelId); return;
+            case "offer-fallback": {
+                // UPnP при «не ответил» ни при чём — подсказка только когда не пробилось соединение
+                const net = fx.reason === "ice-timeout" || fx.reason === "ice-failed";
+                this.hooks.offerFallback(fx.channelId, net ? tunnelHint(this.lastTun) : null);
+                return;
+            }
             case "start-session": this.startSession(fx.peer, fx.video); return;
             case "stop-session": this.stopSession(); return;
         }
@@ -318,6 +358,8 @@ export class CallController {
             iceState: st => this.onIce(st),
         }, { ownCaps: this.ownCaps, codec: () => settings.store.screenCodec as CodecChoice });
         this.session = session;
+        this.sendTun();
+        this.linkTunnel();
         if (mic) {
             // пользователь мог выключить микрофон, пока шёл захват
             mic.getAudioTracks().forEach(t => { t.enabled = this.audioState.mic; });
@@ -341,6 +383,7 @@ export class CallController {
         this.diagTimer = setInterval(() => {
             if (this.session !== session || this.v.call.phase !== "connected" || !settings.store.diagLog || !this.v.stats) return;
             console.info("[P2PCall] stats", JSON.stringify({ ...compactStats(this.v.stats), screenCodec: session.screenCodec(), quality: this.v.screenQuality, capture: captureInfo(this.v.local.screen), encoder: session.screenEncoding() }));
+            if (this.tun) Native.tunnelStatus(this.tun.callId).then(st => { if (st) console.info("[P2PCall] tunnel", JSON.stringify(st)); }, () => { });
         }, 5000);
 
         if (video && this.session === session) await this.toggleCam();
@@ -365,6 +408,64 @@ export class CallController {
         this.audioCtx = null;
         this.audioState = INITIAL_AUDIO;
         this.set({ remote: {}, local: NO_LOCAL, deafened: false, speaking: NOT_SPEAKING, stats: null });
+    }
+
+    /**
+     * Туннель для собеседников за общим CGNAT (specs/001-udp-tunnel-upnp). Готовится, пока идёт вызов;
+     * ошибки только в лог — без туннеля звонок ведёт себя как раньше.
+     */
+    private prepareTunnel(callId: string) {
+        this.closeTunnel();
+        const t: CallTunnel = { callId, info: null, sent: false, peer: null, linked: false };
+        this.tun = t;
+        Native.tunnelPrepare(callId).then(info => {
+            if (this.tun !== t) return;
+            t.info = info;
+            console.info("[P2PCall] tunnel", JSON.stringify(info ? { addr: info.addr, upnp: info.upnp, lanIp: info.lanIp, proxyPort: info.proxyPort } : { failed: true }));
+            this.sendTun();
+            this.linkTunnel();
+        }, e => console.warn("[P2PCall] tunnel", e));
+    }
+
+    /** Свой адрес — собеседнику, как только есть и туннель, и сессия */
+    private sendTun() {
+        const t = this.tun, { peer } = this;
+        if (!t?.info || t.sent || !this.session || peer?.callId !== t.callId) return;
+        t.sent = true;
+        this.sig?.send(peer, t.callId, { type: "tun", addr: t.info.addr, token: t.info.token, upnp: t.info.upnp });
+    }
+
+    private onTun(m: SignalMsg) {
+        const t = this.tun;
+        if (!t || m.callId !== t.callId || typeof m.token !== "string") return;
+        t.peer = { addr: typeof m.addr === "string" ? m.addr : null, token: m.token, upnp: typeof m.upnp === "string" ? m.upnp : "error" };
+        console.info("[P2PCall] tunnel peer", JSON.stringify({ addr: t.peer.addr, upnp: t.peer.upnp }));
+        this.linkTunnel();
+    }
+
+    /**
+     * Кандидат туннеля — только когда собеседник тоже с туннелем (старой версии он не нужен) и адреса есть
+     * у обоих: иначе одна сторона слала бы в туннель, который у другой не принимает пакеты.
+     */
+    private linkTunnel() {
+        const t = this.tun;
+        if (!t?.info?.addr || !t.peer?.addr || !this.session || t.linked) return;
+        t.linked = true;
+        Native.tunnelSetPeer(t.callId, { addr: t.peer.addr, token: t.peer.token }).catch(e => console.warn("[P2PCall] tunnel", e));
+        this.session.addTunnelCandidate(t.info.lanIp, t.info.proxyPort);
+    }
+
+    private closeTunnel() {
+        const t = this.tun;
+        if (!t) return;
+        this.tun = null;
+        this.lastTun = t;
+        // итог туннеля в лог до закрытия — у несостоявшегося звонка другого следа не будет
+        const { call } = this.v;
+        Native.tunnelStatus(t.callId).then(st => console.info("[P2PCall] tunnel end", JSON.stringify({
+            end: call.phase === "ended" ? call.reason : call.phase, own: t.info?.upnp ?? null, peer: t.peer?.upnp ?? null, linked: t.linked, status: st,
+        })), () => { });
+        Native.tunnelClose(t.callId).catch(() => { });
     }
 
     private onRemote(kind: TrackKind, stream: MediaStream | null) {

@@ -36,7 +36,7 @@ export type Effect =
     | { kind: "start-timer"; which: "ring" | "ice"; callId: string; }
     | { kind: "clear-timers"; }
     | { kind: "ringtone"; on: boolean; }
-    | { kind: "offer-fallback"; channelId: string; };
+    | { kind: "offer-fallback"; channelId: string; reason: EndReason; };
 
 type Result = { state: CallState; effects: Effect[]; };
 type Active = Extract<CallState, Peer>;
@@ -55,7 +55,7 @@ function end(s: Active, reason: EndReason, bye: boolean): Result {
     if (bye) effects.push({ kind: "send", peer: peerOf(s), msg: { type: "bye", reason } });
     if (s.phase === "connecting" || s.phase === "connected") effects.push({ kind: "stop-session" });
     effects.push({ kind: "leave-room", callId: s.callId });
-    if (FALLBACK.includes(reason)) effects.push({ kind: "offer-fallback", channelId: s.channelId });
+    if (FALLBACK.includes(reason)) effects.push({ kind: "offer-fallback", channelId: s.channelId, reason });
     return { state: { phase: "ended", reason, peerId: s.peerId, channelId: s.channelId }, effects };
 }
 

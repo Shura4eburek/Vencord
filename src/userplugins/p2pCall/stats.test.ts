@@ -13,7 +13,7 @@ const base = (over: { local?: string; remote?: string; lost?: number; received?:
     { type: "transport", id: "T", selectedCandidatePairId: "P" },
     { type: "candidate-pair", id: "P", localCandidateId: "L", remoteCandidateId: "R", currentRoundTripTime: 0.004 },
     { type: "local-candidate", id: "L", candidateType: over.local ?? "srflx" },
-    { type: "remote-candidate", id: "R", candidateType: over.remote ?? "host" },
+    { type: "remote-candidate", id: "R", candidateType: over.remote ?? "host", address: "192.168.1.102", port: 51602 },
     { type: "inbound-rtp", id: "I", kind: "audio", packetsLost: over.lost ?? 0, packetsReceived: over.received ?? 100, bytesReceived: over.recv ?? 1000 },
     { type: "outbound-rtp", id: "O", kind: "audio", bytesSent: over.sent ?? 2000 },
 ];
@@ -22,6 +22,11 @@ test("rtt in ms and srflx path", () => {
     const s = summarizeStats(base({}), 1000);
     assert.equal(s.rttMs, 4);
     assert.equal(s.path, "srflx");
+});
+
+test("pair to the tunnel proxy is reported as tunnel", () => {
+    assert.equal(summarizeStats(base({ local: "host" }), 0, undefined, { tunnel: "192.168.1.102:51602" }).path, "tunnel");
+    assert.equal(summarizeStats(base({ local: "host" }), 0, undefined, { tunnel: "192.168.1.102:1" }).path, "host");
 });
 
 test("relay wins over srflx", () => {

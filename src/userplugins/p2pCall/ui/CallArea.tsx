@@ -28,7 +28,7 @@ export const END_TEXT: Record<EndReason, string> = {
     "ice-timeout": "Прямое соединение не установилось",
     "ice-failed": "Соединение потеряно",
 };
-export const PATH_TEXT: Record<PathType, string> = { host: "напрямую (LAN)", srflx: "напрямую", relay: "через ретранслятор", unknown: "…" };
+export const PATH_TEXT: Record<PathType, string> = { host: "напрямую (LAN)", srflx: "напрямую", relay: "через ретранслятор", tunnel: "напрямую (туннель)", unknown: "…" };
 
 const MIN_H = 160;
 const DEFAULT_H = 300;

@@ -8,6 +8,7 @@ import { Caps, chooseCodec, CodecChoice, isCaps, orderCodecs } from "./codecs";
 import { DEFAULT_OPUS, tuneOpus, tuneVideo } from "./sdp";
 import { CallStats, Counters, summarizeStats } from "./stats";
 import { DEFAULT_QUALITY, encoderParams, StreamQuality } from "./streamQuality";
+import { tunnelCandidate } from "./tunnelWire";
 
 export type TrackKind = "mic" | "cam" | "screen";
 export type OutSignal = { type: "offer" | "answer"; sdp: string; } | { type: "ice"; candidate: RTCIceCandidateInit | null; };
@@ -50,6 +51,8 @@ export class Session {
     private chosen: string | null = null;
     private codecChoice: () => CodecChoice;
     private prev?: Counters;
+    private tunnel: { ip: string; port: number; } | null = null;
+    private tunnelUfrag: string | null = null;
 
     constructor(private polite: boolean, private cb: SessionCallbacks, opts: SessionOptions) {
         this.codecChoice = opts.codec;
@@ -180,10 +183,33 @@ export class Session {
         } finally {
             this.settingRemoteAnswer = false;
         }
+        await this.applyTunnel();
         if (m.type === "offer") {
             await this.pc.setLocalDescription();
             this.cb.signal({ type: "answer", sdp: tuneSdp(this.pc.localDescription!.sdp) });
         }
+    }
+
+    /**
+     * Кандидат «собеседник у нашего прокси-туннеля» добавляем себе сами — он не ходит через сигналинг.
+     * Повторяется после каждого remote description: после ICE restart у собеседника новый ufrag.
+     */
+    addTunnelCandidate(ip: string, port: number) {
+        this.tunnel = { ip, port };
+        const run = this.queue.then(() => this.applyTunnel());
+        this.queue = run.catch(() => { });
+    }
+
+    private async applyTunnel() {
+        const sdp = this.pc.remoteDescription?.sdp;
+        if (!this.tunnel || !sdp) return;
+        // пересогласование камеры/демки ufrag не меняет — кандидат уже стоит
+        const ufrag = sdp.match(/^a=ice-ufrag:(\S+)/m)?.[1] ?? null;
+        if (ufrag === this.tunnelUfrag) return;
+        this.tunnelUfrag = ufrag;
+        const c = tunnelCandidate(this.tunnel.ip, this.tunnel.port);
+        c.sdpMid = sdp.match(/^a=mid:(\S+)/m)?.[1] ?? c.sdpMid;
+        await this.pc.addIceCandidate(c).catch(e => console.warn("[P2PCall] tunnel candidate", e));
     }
 
     restartIce() {
@@ -195,7 +221,8 @@ export class Session {
         const outTrack = this.local.get("screen")?.getVideoTracks()[0]?.id ?? null;
         let inTrack: string | null = null;
         for (const [id, kind] of this.remoteKinds) if (kind === "screen") inTrack = this.remoteStreams.get(id)?.getVideoTracks()[0]?.id ?? null;
-        const s = summarizeStats(report.values(), performance.now(), this.prev, { outTrack, inTrack });
+        const tunnel = this.tunnel && `${this.tunnel.ip}:${this.tunnel.port}`;
+        const s = summarizeStats(report.values(), performance.now(), this.prev, { outTrack, inTrack, tunnel });
         this.prev = s.counters;
         return s;
     }

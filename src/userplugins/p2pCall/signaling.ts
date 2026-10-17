@@ -12,10 +12,12 @@ import { NostrEvent, RelayConn, WsFactory } from "./relay";
 export const KIND = 25050;
 export const MAX_AGE_MS = 30_000;
 
-export type SignalType = "ring" | "accept" | "decline" | "offer" | "answer" | "ice" | "bye";
+export type SignalType = "ring" | "accept" | "decline" | "offer" | "answer" | "ice" | "bye" | "tun";
 export interface SignalMsg {
     type: SignalType; msgId: string; callId: string; from: string; ts: number;
     channelId?: string; video?: boolean; sdp?: string; candidate?: RTCIceCandidateInit | null; reason?: string;
+    /** tun: адрес туннеля этой стороны (specs/001-udp-tunnel-upnp/contracts/tunnel.md §1) */
+    addr?: string | null; token?: string; upnp?: string;
 }
 export interface PeerCtx { channelId: string; peerId: string; }
 export interface SignalingOptions {

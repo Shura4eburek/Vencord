@@ -93,6 +93,20 @@ test("room messages flow after joinCall, stop after leaveCall", async () => {
     assert.equal(a.got.length, 1);
 });
 
+test("tun travels through the call room with its tunnel fields", async () => {
+    const ws = hub();
+    const a = client(A, B, ws), b = client(B, A, ws);
+    a.sig.start(); b.sig.start();
+    await tick();
+    const ctxA = { channelId: CH, peerId: B }, ctxB = { channelId: CH, peerId: A };
+    a.sig.joinCall("c1", ctxA); b.sig.joinCall("c1", ctxB);
+    await tick();
+    b.sig.send(ctxB, "c1", { type: "tun", addr: "178.158.220.104:40123", token: "0102030405060708", upnp: "ok" });
+    await tick();
+    const m = a.got[0].msg;
+    assert.deepEqual([m.type, m.addr, m.token, m.upnp], ["tun", "178.158.220.104:40123", "0102030405060708", "ok"]);
+});
+
 test("duplicate delivery via several relays is handled once", async () => {
     const ws = hub();
     const relays = ["wss://r1", "wss://r2", "wss://r3"];

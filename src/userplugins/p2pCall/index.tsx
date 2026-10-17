@@ -66,9 +66,9 @@ export default definePlugin({
 
     start() {
         const c = new CallController(UserStore.getCurrentUser().id, {
-            offerFallback: channelId => showNotification({
+            offerFallback: (channelId, hint) => showNotification({
                 title: "P2P-звонок не удался",
-                body: "Нажми, чтобы позвонить через Discord",
+                body: hint ? `${hint}. Нажми, чтобы позвонить через Discord` : "Нажми, чтобы позвонить через Discord",
                 onClick: () => VoiceActions.selectVoiceChannel(channelId),
             }),
             warn: text => showToast(text, Toasts.Type.FAILURE),

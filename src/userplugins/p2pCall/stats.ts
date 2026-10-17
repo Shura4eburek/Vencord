@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-export type PathType = "host" | "srflx" | "relay" | "unknown";
+export type PathType = "host" | "srflx" | "relay" | "tunnel" | "unknown";
 export interface Counters { at: number; recvBytes: number; sentBytes: number; lost: number; received: number; }
 export type Limit = "none" | "cpu" | "bandwidth" | "other";
 /** srcFps — сколько кадров отдаёт захват кодеру (media-source); fps — сколько кодер отправляет */
@@ -43,7 +43,8 @@ function videoSide(r: any, byId: Map<string, any>, out: boolean): VideoSide | nu
     };
 }
 
-export interface TrackIds { outTrack?: string | null; inTrack?: string | null; }
+/** tunnel — `ip:port` прокси туннеля: пара с таким удалённым кандидатом идёт через туннель */
+export interface TrackIds { outTrack?: string | null; inTrack?: string | null; tunnel?: string | null; }
 
 /** Отправка — по треку демки (media-source.trackIdentifier), приём — по треку демки собеседника; без них — самый большой кадр */
 function pickVideo(all: any[], byId: Map<string, any>, type: string, trackId: string | null | undefined) {
@@ -82,6 +83,8 @@ export function summarizeStats(reports: Iterable<any>, now: number, prev?: Count
             const t = RANK[byId.get(id)?.candidateType] ?? "unknown";
             if (ORDER.indexOf(t) > ORDER.indexOf(path)) path = t;
         }
+        const rc = byId.get(pair.remoteCandidateId);
+        if (ids.tunnel && rc && `${rc.address ?? rc.ip}:${rc.port}` === ids.tunnel) path = "tunnel";
     }
 
     let lossPct = 0, inKbps = 0, outKbps = 0;
