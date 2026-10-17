@@ -90,6 +90,23 @@ test("ring while busy → decline busy to the new caller, state untouched", () =
     ]);
 });
 
+test("ring from the same peer with a new callId while connected → old call ended, new one incoming", () => {
+    const connected: CallState = { phase: "connected", ...peer };
+    const again = { ...peer, callId: "c2" };
+    const r = reduce(connected, { type: "ring", video: false, ...again });
+    assert.equal(r.state.phase, "incoming");
+    assert.equal((r.state as { callId: string; }).callId, "c2");
+    assert.deepEqual(kinds(r), ["clear-timers", "ringtone", "stop-session", "leave-room", "join-room", "ringtone", "start-timer"]);
+    assert.ok(!r.effects.some(e => e.kind === "send"));
+});
+
+test("ring from the same peer while both dial each other → still busy", () => {
+    const out = reduce(idle, { type: "dial", video: false, ...peer }).state;
+    const r = reduce(out, { type: "ring", video: false, ...peer, callId: "c2" });
+    assert.equal(r.state, out);
+    assert.ok(r.effects.some(e => e.kind === "send" && e.msg.type === "decline"));
+});
+
 test("remote-decline busy → ended busy without fallback", () => {
     const out = reduce(idle, { type: "dial", video: false, ...peer }).state;
     const r = reduce(out, { type: "remote-decline", callId: "c1", reason: "busy" });

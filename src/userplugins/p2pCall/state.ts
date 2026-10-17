@@ -79,6 +79,13 @@ export function reduce(s: CallState, e: CallEvent): Result {
             const peer: Peer = { callId: e.callId, peerId: e.peerId, channelId: e.channelId };
             if (isActive(s)) {
                 if (s.callId === e.callId) return same(s);
+                // тот же собеседник звонит с новым callId — он перезапустил Discord, старый звонок у него мёртв;
+                // встречный дозвон (оба outgoing) по-прежнему «занят»
+                if (s.peerId === e.peerId && s.phase !== "outgoing") {
+                    const old = end(s, "remote-hangup", false);
+                    const next = reduce(old.state, e);
+                    return { state: next.state, effects: [...old.effects, ...next.effects] };
+                }
                 return {
                     state: s,
                     effects: [
