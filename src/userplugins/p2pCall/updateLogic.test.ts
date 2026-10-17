@@ -7,7 +7,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { isNewer, nextVersion, parseManifest, sha256Hex, UPDATE_FILES } from "./updateLogic";
+import { ACTION_OF, isNewer, NET_FILE, nextVersion, parseManifest, parseManifestV2, sha256Hex, strongest, UPDATE_FILES, UPDATE_FILES_V2 } from "./updateLogic";
 
 const hash = "a".repeat(64);
 const files = Object.fromEntries(UPDATE_FILES.map(f => [f, hash]));
@@ -47,4 +47,25 @@ test("parseManifest rejects bad versions, missing files, extra files, bad hashes
 
 test("sha256Hex", () => {
     assert.equal(sha256Hex(new TextEncoder().encode("abc")), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+});
+
+test("each update file maps to its apply action", () => {
+    assert.deepEqual(UPDATE_FILES_V2.map(f => ACTION_OF[f]), ["restart", "restart", "reload", "reload", "none"]);
+    assert.equal(NET_FILE, "p2pcall-net.js");
+});
+
+test("strongest picks restart over reload over none", () => {
+    assert.equal(strongest([]), "none");
+    assert.equal(strongest(["none", "reload"]), "reload");
+    assert.equal(strongest(["reload", "restart", "none"]), "restart");
+});
+
+test("parseManifestV2 wants schema 2 and exactly the five files; v1 still wants four", () => {
+    const v2 = { schema: 2, version: "2026.10.18-3", files: Object.fromEntries(UPDATE_FILES_V2.map(f => [f, hash])) };
+    assert.equal(parseManifestV2(v2)?.files[NET_FILE], hash);
+    assert.equal(parseManifestV2({ ...v2, schema: 1 }), null);
+    assert.equal(parseManifestV2({ ...v2, files: files }), null);
+    assert.equal(parseManifestV2({ ...v2, files: { ...v2.files, "evil.js": hash } }), null);
+    assert.equal(parseManifest(v2), null, "old installs reject the v2 file list");
+    assert.ok(parseManifest({ version: "2026.10.18-3", files }));
 });

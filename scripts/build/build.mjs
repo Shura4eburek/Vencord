@@ -217,4 +217,15 @@ const buildConfigs = ([
     }
 ]);
 
+// P2PCall: сетевая часть отдельным бандлом — native.ts перезагружает его между звонками без перезапуска Discord
+if (await exists("src/userplugins/p2pCall/net.ts")) {
+    buildConfigs.push({
+        ...nodeCommonOpts,
+        entryPoints: ["src/userplugins/p2pCall/net.ts"],
+        outfile: "dist/p2pcall-net.js",
+        sourcemap: false,
+        define: { ...defines, IS_DISCORD_DESKTOP: "true", IS_VESKTOP: "false" }
+    });
+}
+
 await buildOrWatchAll(buildConfigs);

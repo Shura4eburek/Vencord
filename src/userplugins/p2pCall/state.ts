@@ -44,7 +44,7 @@ type Active = Extract<CallState, Peer>;
 export const isPolite = (selfId: string, peerId: string) => BigInt(selfId) < BigInt(peerId);
 
 const peerOf = (s: Active): Peer => ({ callId: s.callId, peerId: s.peerId, channelId: s.channelId });
-const isActive = (s: CallState): s is Active => s.phase !== "idle" && s.phase !== "ended";
+export const isActive = (s: CallState): s is Active => s.phase !== "idle" && s.phase !== "ended";
 
 const FALLBACK: EndReason[] = ["no-answer", "ice-timeout", "ice-failed"];
 

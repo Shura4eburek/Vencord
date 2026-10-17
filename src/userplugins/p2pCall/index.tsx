@@ -16,6 +16,7 @@ import { ChannelStore, SelectedChannelStore, showToast, Toasts, UserStore } from
 import { CallController } from "./controller";
 import { CALL_AREA_PATCH, HEADER_PATCH, PANEL_PATCH } from "./patches";
 import { settings } from "./settings";
+import { isActive } from "./state";
 import { CallAreaSlot } from "./ui/CallArea";
 import { ConnectedPanel } from "./ui/ConnectedPanel";
 import { HeaderCallButton } from "./ui/HeaderCallButton";
@@ -81,7 +82,10 @@ export default definePlugin({
         });
         controller = c;
         c.start();
-        startUpdater(() => settings.store.autoUpdate);
+        startUpdater(() => settings.store.autoUpdate, {
+            inCall: () => isActive(c.view.call),
+            onCallEnd: fn => c.subscribe(() => { if (!isActive(c.view.call)) fn(); }),
+        });
     },
 
     stop() {
