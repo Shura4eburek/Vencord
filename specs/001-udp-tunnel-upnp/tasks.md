@@ -83,7 +83,7 @@ description: "Task list for UDP tunnel with UPnP port mapping"
 - [X] T018 [P] `controller.ts`: строка `[P2PCall] tunnel` в диагностический лог при подготовке, при получении `tun` и раз в 5 с вместе со `stats` (порт, UPnP, адреса, маска, rx/tx/dropped) — FR-012
 - [X] T019 [P] `docs/p2pcall-connect.md` §5 и `docs/p2pcall-todo.md`: туннель вместо «решения на будущее», как проверить UPnP
 - [X] T020 `npx tsx --test src/userplugins/p2pCall/*.test.ts`, `pnpm testTsc`, `pnpm lint` — всё зелёное
-- [ ] T021 Живая проверка по quickstart (шаги 1–8) с другом; результаты — в `quickstart.md`
+- [X] T021 Живая проверка по quickstart (шаги 1–8) с другом; результаты — в `quickstart.md`
 
 ---
 
