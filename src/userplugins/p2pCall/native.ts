@@ -6,12 +6,15 @@
 
 import { ConnectSrc, CspPolicies } from "@main/csp";
 import { RendererSettings } from "@main/settings";
-import { app, desktopCapturer, IpcMainInvokeEvent } from "electron";
-import { existsSync } from "fs";
+import { bytesToHex } from "@noble/hashes/utils";
+import { app, desktopCapturer, IpcMainInvokeEvent, safeStorage } from "electron";
+import { existsSync, readFileSync, renameSync, writeFileSync } from "fs";
 import { join } from "path";
 
+import { Contact, ContactBook, Device, Identity, newIdentity, pairKey, parseIdentity, serializeIdentity, verificationCode } from "./contacts";
 import type { TunnelPrepared, TunnelStatus } from "./net";
 import { NetLoader } from "./netLoader";
+import { HandleResult, Pairing, PakeMsg, PeerInfo } from "./pairing";
 import { relayCspSource } from "./relay";
 import { Action, NET_FILE } from "./updateLogic";
 import { applyUpdate, UpdateResult } from "./updateRun";
@@ -134,4 +137,110 @@ export function tunnelStatus(_: IpcMainInvokeEvent, callId: string): TunnelStatu
 
 export function tunnelClose(_: IpcMainInvokeEvent, callId: string) {
     net.current()?.close(callId);
+}
+
+// ── Ключи и контакты (specs/003-identity-keys, research R4) ──
+// Приватный ключ не покидает main: рендерер получает только ключи пар.
+
+const IDENTITY_FILE = "p2pcall-identity.bin";
+const PLAIN = "plain:";
+const userFile = (name: string) => join(app.getPath("userData"), name);
+
+/** Запись через временный файл: падение Discord посреди записи не оставит обрезанный файл */
+function writeAtomic(path: string, data: string | Buffer) {
+    writeFileSync(path + ".tmp", data);
+    renameSync(path + ".tmp", path);
+}
+
+/**
+ * Ключ под safeStorage (DPAPI): другой пользователь Windows его не прочитает. Нет DPAPI — без шифрования.
+ * Файл есть, но не читается (сбой DPAPI, миграция профиля) — ключ НЕ меняем: бросаем, и в эту сессию звонки
+ * идут без ключей; новый ключ сделал бы всех контактов «подменёнными», а старый был бы потерян.
+ */
+function loadIdentity(): Identity {
+    const path = userFile(IDENTITY_FILE);
+    if (existsSync(path)) {
+        const buf = readFileSync(path);
+        const raw = buf.subarray(0, PLAIN.length).toString("latin1") === PLAIN ? buf.subarray(PLAIN.length).toString("utf8") : safeStorage.decryptString(buf);
+        const id = parseIdentity(raw);
+        if (!id) throw new Error("p2pcall-identity.bin не читается — ключ не изменён");
+        return id;
+    }
+    const id = newIdentity();
+    const raw = serializeIdentity(id);
+    if (safeStorage.isEncryptionAvailable()) writeAtomic(path, safeStorage.encryptString(raw));
+    else {
+        console.warn("[P2PCall] safeStorage недоступен — ключ хранится без шифрования");
+        writeAtomic(path, PLAIN + raw);
+    }
+    return id;
+}
+
+interface Keys { selfId: string; id: Identity; book: ContactBook; pairing: Pairing; }
+let keys: Keys | null = null;
+
+/** Контакты — свои у каждого аккаунта Discord; личность установки общая */
+export function pairingInit(_: IpcMainInvokeEvent, selfId: string) {
+    if (keys?.selfId === selfId) return;
+    const id = keys?.id ?? loadIdentity();
+    const file = userFile(`p2pcall-contacts-${selfId}.json`);
+    const book = new ContactBook({
+        load: () => {
+            if (!existsSync(file)) return null;
+            const raw = readFileSync(file, "utf8");
+            // битый файл не затираем молча: копия остаётся, чтобы контакты можно было восстановить
+            try { JSON.parse(raw); } catch { renameSync(file, `${file}.corrupt-${Date.now()}`); return null; }
+            return raw;
+        },
+        save: data => writeAtomic(file, data),
+    });
+    keys = { selfId, id, book, pairing: new Pairing(selfId, id, book) };
+}
+
+const NONE: HandleResult = { send: [], added: null };
+
+export function pairingStart(_: IpcMainInvokeEvent, peerId: string, peer: PeerInfo, force = false): PakeMsg | null {
+    return keys?.pairing.start(peerId, peer, force) ?? null;
+}
+
+export function pairingHandle(_: IpcMainInvokeEvent, msg: PakeMsg, peer: PeerInfo | null): HandleResult {
+    return keys?.pairing.handle(msg, peer) ?? NONE;
+}
+
+export interface PairKeyWire { userId: string; deviceId: string; channelId: string; key: string; mutual: boolean; }
+
+/** Только доверенные устройства: pending (новое устройство или подмена) ключа пары не получает */
+export function pairKeys(_: IpcMainInvokeEvent): PairKeyWire[] {
+    if (!keys) return [];
+    const { id, book } = keys;
+    // каждое устройство отдельно: один негодный ключ в файле не должен лишить ключей всех контактов
+    return book.list().flatMap(c => c.devices.filter(d => d.state === "trusted").flatMap(d => {
+        try {
+            const key = bytesToHex(pairKey(id, Uint8Array.from(Buffer.from(d.publicKey, "hex")), d.deviceId));
+            return [{ userId: c.userId, deviceId: d.deviceId, channelId: c.channelId, mutual: d.mutual, key }];
+        } catch {
+            return [];
+        }
+    }));
+}
+
+export type ContactView = Omit<Contact, "devices"> & { devices: (Device & { code: string; })[]; };
+
+export function contactsList(_: IpcMainInvokeEvent): ContactView[] {
+    if (!keys) return [];
+    const own = keys.id.publicKey;
+    return keys.book.list().map(c => ({
+        ...c,
+        devices: c.devices.map(d => ({ ...d, code: verificationCode(own, Uint8Array.from(Buffer.from(d.publicKey, "hex"))) })),
+    }));
+}
+
+export function contactConfirm(_: IpcMainInvokeEvent, userId: string, publicKey: string) { keys?.book.confirm(userId, publicKey); }
+export function contactVerify(_: IpcMainInvokeEvent, userId: string, publicKey: string, verified: boolean) { keys?.book.setVerified(userId, publicKey, verified); }
+export function contactRemove(_: IpcMainInvokeEvent, userId: string, publicKey?: string) { keys?.book.remove(userId, publicKey); }
+export function contactProfile(_: IpcMainInvokeEvent, userId: string, name: string, avatar: string | null) { keys?.book.updateProfile(userId, name, avatar); }
+
+export function contactMutual(_: IpcMainInvokeEvent, userId: string, deviceId: string) {
+    const d = keys?.book.get(userId)?.devices.find(x => x.deviceId === deviceId && x.state === "trusted");
+    if (d) keys!.book.markMutual(userId, d.publicKey);
 }

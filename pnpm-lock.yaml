@@ -17,6 +17,9 @@ importers:
       '@noble/ciphers':
         specifier: ^1.3.0
         version: 1.3.0
+      '@noble/curves':
+        specifier: 2.0.1
+        version: 2.0.1
       '@noble/hashes':
         specifier: ^1.8.0
         version: 1.8.0

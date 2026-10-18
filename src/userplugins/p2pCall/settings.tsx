@@ -8,6 +8,7 @@ import { definePluginSettings } from "@api/Settings";
 import { OptionType } from "@utils/types";
 
 import { DEFAULT_QUALITY, sanitizeQuality, StreamQuality } from "./streamQuality";
+import { ContactsList } from "./ui/Contacts";
 import { DeviceSelect } from "./ui/DeviceSelect";
 import { CheckNowButton } from "./updater";
 
@@ -49,6 +50,10 @@ export const settings = definePluginSettings({
         component: () => <CheckNowButton />,
     },
     showStats: { type: OptionType.BOOLEAN, description: "Показывать пинг, потери и тип канала", default: true },
+    contacts: {
+        type: OptionType.COMPONENT, description: "Контакты и ключи P2P",
+        component: () => <ContactsList />,
+    },
 });
 
 export const relayList = () => settings.store.relays.split(",").map(s => s.trim()).filter(Boolean);

@@ -5,7 +5,6 @@
  */
 
 import { xchacha20poly1305 } from "@noble/ciphers/chacha";
-import { hkdf } from "@noble/hashes/hkdf";
 import { sha256 } from "@noble/hashes/sha2";
 import { bytesToHex, randomBytes, utf8ToBytes } from "@noble/hashes/utils";
 
@@ -15,12 +14,6 @@ const hashHex = (s: string) => bytesToHex(sha256(utf8ToBytes(s)));
 
 export const topicLine = (userId: string) => hashHex(`${V}:line:${userId}`);
 export const topicCall = (callId: string) => hashHex(`${V}:call:${callId}`);
-export const pairHint = (channelId: string) => hashHex(`${V}:pair:${channelId}`);
-
-export function deriveKey(channelId: string, uidA: string, uidB: string): Uint8Array {
-    const [lo, hi] = BigInt(uidA) < BigInt(uidB) ? [uidA, uidB] : [uidB, uidA];
-    return hkdf(sha256, utf8ToBytes(`${channelId}:${lo}:${hi}`), undefined, V, 32);
-}
 
 function toB64(bytes: Uint8Array): string {
     let s = "";

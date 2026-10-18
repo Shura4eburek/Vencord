@@ -4,22 +4,25 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { hexToBytes } from "@noble/hashes/utils";
 import { PluginNative } from "@utils/types";
 
 import { CodecChoice, probeCaps } from "./codecs";
-import { newCallId, pairHint } from "./crypto";
+import { newCallId } from "./crypto";
 import { compactStats } from "./diagLog";
 import { LevelMeter } from "./levelMeter";
 import { INITIAL_AUDIO, LocalAudio, toggleDeafenState, toggleMicState } from "./localAudio";
 import { getCamera, getMic, getScreen, playStream } from "./media";
 import type { TunnelPrepared } from "./native";
+import type { PakeMsg } from "./pairing";
 import { startRingtone, stopRingtone } from "./ringtone";
 import { OutSignal, Session, TrackKind } from "./session";
 import { relayList, savedQuality, saveQuality, settings } from "./settings";
-import { PeerCtx, Signaling,SignalMsg } from "./signaling";
+import { PairKey, PeerCtx, Signaling, SignalMsg } from "./signaling";
 import { CallEvent, CallState, Effect, isMissedCall, isPolite, Peer, reduce } from "./state";
 import { CallStats } from "./stats";
 import { needsRecapture, StreamQuality, trackConstraints } from "./streamQuality";
+import { contactsChanged } from "./ui/Contacts";
 
 const Native = VencordNative.pluginHelpers.P2PCall as PluginNative<typeof import("./native")>;
 
@@ -39,11 +42,15 @@ interface Hooks {
     warn(text: string): void;
     inVoiceChannel(): boolean;
     dmPeers(): PeerCtx[];
+    profile(userId: string): { name: string; avatar: string | null; };
+    /** У известного контакта новый ключ: новое устройство или подмена — звонки с ним ждут подтверждения */
+    newKey(userId: string): void;
     onIncoming(): void;
     info(text: string): void;
 }
 
 const ENDED_SHOW_MS = 3000;
+const KEY_WAIT_MS = 8000;
 
 /** Что реально выдал захват: разрешение и FPS по настройкам трека — сравнить с выбранным качеством */
 function captureInfo(stream: MediaStream | null) {
@@ -96,7 +103,6 @@ export class CallController {
     private audioCtx: AudioContext | null = null;
     private selfMeter: LevelMeter | null = null;
     private peerMeter: LevelMeter | null = null;
-    private hints = new Map<string, PeerCtx>();
     private tun: CallTunnel | null = null;
     /** Туннель только что закрытого звонка — для подсказки в offer-fallback, который идёт после leave-room */
     private lastTun: CallTunnel | null = null;
@@ -120,11 +126,18 @@ export class CallController {
             selfId: this.selfId,
             relays: relayList(),
             ws: url => new WebSocket(url) as any,
-            resolvePair: h => this.resolvePair(h),
             onMessage: (m, ctx) => this.onSignal(m, ctx),
             onStatus: n => this.set({ relaysUp: n }),
+            onPake: m => this.onPake(m),
+            onMutual: k => { Native.contactMutual(k.userId, k.deviceId).then(() => this.refreshKeys(), () => { }); },
         });
         this.sig.start();
+        contactsChanged.add(this.onContactsChanged);
+        // ключи и контакты. Обмен — только при открытии ЛС и звонке: рассылка по всем ЛС при старте выдавала бы
+        // релеям, с кем у тебя есть переписка (pake1 несёт ID отправителя открытым текстом)
+        Native.pairingInit(this.selfId)
+            .then(() => this.refreshKeys())
+            .catch(e => console.warn("[P2PCall] keys", e));
     }
 
     stop() {
@@ -132,21 +145,66 @@ export class CallController {
         clearTimeout(this.resetTimer);
         this.run({ kind: "clear-timers" });
         this.closeTunnel();
+        contactsChanged.delete(this.onContactsChanged);
         this.sig?.stop();
         this.sig = null;
     }
 
-    private resolvePair(hint: string): PeerCtx | null {
-        let ctx = this.hints.get(hint);
-        if (!ctx) {
-            this.hints.clear();
-            for (const p of this.hooks.dmPeers()) this.hints.set(pairHint(p.channelId), p);
-            ctx = this.hints.get(hint);
-        }
-        return ctx ?? null;
+    /** Открыт ЛС — повод обменяться ключами, если ещё не обменялись */
+    openedChannel(channelId: string) {
+        const p = this.hooks.dmPeers().find(x => x.channelId === channelId);
+        if (p) this.startPairing(p);
     }
 
-    dial(channelId: string, peerId: string, video: boolean) {
+    private onContactsChanged = () => { this.refreshKeys().catch(() => { }); };
+
+    private refreshKeys() {
+        return Native.pairKeys().then(list => {
+            const keys: PairKey[] = list.map(k => ({ ...k, key: hexToBytes(k.key) }));
+            this.sig?.setPairKeys(keys);
+        });
+    }
+
+    /** force — звонок: не ждать 10 мин с прошлой попытки (у Pairing свой короткий предел) */
+    private startPairing(p: PeerCtx, force = false) {
+        const profile = this.hooks.profile(p.peerId);
+        // имя и аватар контакта — свежие из Discord, пока он доступен (файл пишется только при изменении)
+        Native.contactProfile(p.peerId, profile.name, profile.avatar).catch(() => { });
+        Native.pairingStart(p.peerId, { channelId: p.channelId, ...profile }, force)
+            .then(m => { if (m) this.sig?.sendPake(p.peerId, m); }, () => { });
+    }
+
+    /** ЛС с отправителем — пароль обмена; без ЛС main сообщение игнорирует */
+    private onPake(m: PakeMsg) {
+        const p = this.hooks.dmPeers().find(x => x.peerId === m.from);
+        const peer = p ? { channelId: p.channelId, ...this.hooks.profile(p.peerId) } : null;
+        Native.pairingHandle(m, peer).then(async r => {
+            if (r.added) {
+                console.info("[P2PCall] keys", JSON.stringify({ peer: r.added.userId, result: r.added.result }));
+                if (r.added.result === "pending") this.hooks.newKey(r.added.userId);
+                // сначала свой ключ пары, потом pake3/pairok: ответ собеседника на ключе пары не потеряется
+                await this.refreshKeys();
+            }
+            for (const out of r.send) this.sig?.sendPake(m.from, out);
+            // ответчик завершил обмен — сообщаем инициатору, что ключ взаимный
+            if (r.added && m.type === "pake3") this.sig?.sendPairOk(m.from);
+        }).catch(e => console.warn("[P2PCall] keys", e));
+    }
+
+    /**
+     * Без ключа пары звонить нечем (прежней схемы нет): сначала обмен ключами, до KEY_WAIT_MS. Не вышло —
+     * у собеседника старая версия P2PCall или он не в сети
+     */
+    async dial(channelId: string, peerId: string, video: boolean) {
+        if (!this.sig?.hasKey(peerId)) {
+            this.startPairing({ channelId, peerId }, true);
+            const deadline = Date.now() + KEY_WAIT_MS;
+            while (!this.sig?.hasKey(peerId) && Date.now() < deadline) await new Promise(r => setTimeout(r, 250));
+            if (!this.sig?.hasKey(peerId)) {
+                this.hooks.warn("Нет ключа P2P с собеседником: у него старая версия P2PCall или он не в сети");
+                return;
+            }
+        }
         if (this.hooks.inVoiceChannel()) this.hooks.warn("Ты сейчас в голосовом канале Discord — он продолжит работать параллельно");
         this.dispatch({ type: "dial", callId: newCallId(), channelId, peerId, video });
     }

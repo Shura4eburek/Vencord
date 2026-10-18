@@ -37,6 +37,7 @@
     "dependencies": {
         "@intrnl/xxhash64": "^0.1.2",
         "@noble/ciphers": "^1.3.0",
+        "@noble/curves": "2.0.1",
         "@noble/hashes": "^1.8.0",
         "@vap/core": "0.0.12",
         "@vap/shiki": "0.10.5",

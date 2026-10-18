@@ -378,3 +378,14 @@
     right: 0;
     transform: none;
 }
+
+.p2p-contacts { display: flex; flex-direction: column; gap: 10px; }
+.p2p-contacts-note { color: var(--text-muted); font-size: 13px; }
+.p2p-contact { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border-radius: 8px; background: var(--background-secondary); }
+.p2p-contact-head { display: flex; align-items: center; gap: 8px; color: var(--header-primary); }
+.p2p-contact-head img { width: 24px; height: 24px; border-radius: 50%; }
+.p2p-contact-head button { margin-left: auto; }
+.p2p-device { display: flex; align-items: center; gap: 10px; color: var(--text-normal); font-size: 13px; }
+.p2p-device code { font-size: 15px; letter-spacing: 1px; }
+.p2p-device label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.p2p-device-pending { color: var(--text-warning, #f0b232); }

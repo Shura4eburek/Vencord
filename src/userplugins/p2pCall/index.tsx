@@ -34,6 +34,13 @@ export default definePlugin({
     settings,
     patches: [HEADER_PATCH, CALL_AREA_PATCH, PANEL_PATCH],
 
+    flux: {
+        // открыт ЛС — обмениваемся ключами с собеседником, если ещё нет контакта
+        CHANNEL_SELECT({ channelId }: { channelId?: string; }) {
+            if (channelId) controller?.openedChannel(channelId);
+        },
+    },
+
     renderHeaderButton(channel: Channel | undefined, HeaderBar: any) {
         if (!controller || !channel?.isDM() || channel.recipients?.length !== 1) return null;
         return (
@@ -79,6 +86,15 @@ export default definePlugin({
             dmPeers: () => ChannelStore.getSortedPrivateChannels()
                 .filter(ch => ch.isDM() && ch.recipients.length === 1)
                 .map(ch => ({ channelId: ch.id, peerId: ch.recipients[0] })),
+            profile: userId => {
+                const u = UserStore.getUser(userId);
+                return { name: u ? (u as any).globalName ?? u.username : userId, avatar: u?.getAvatarURL?.(undefined, 64) ?? null };
+            },
+            newKey: userId => showNotification({
+                title: "Новый ключ P2P",
+                body: `У ${UserStore.getUser(userId)?.username ?? userId} новый ключ — новое устройство или подмена. Сверь код проверки в настройках P2PCall и подтверди`,
+                permanent: true,
+            }),
         });
         controller = c;
         c.start();
