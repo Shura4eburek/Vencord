@@ -163,10 +163,13 @@ export function reduce(s: CallState, e: CallEvent): Result {
     }
 }
 
-/** Показывать ли область звонка в этом канале: идёт или только что завершился наш звонок */
-export function areaVisible(s: CallState, channelId: string | undefined): boolean {
+/**
+ * Показывать ли область звонка в этом канале: идёт или только что завершился наш звонок. channels — ЛС с
+ * остальными участниками группового звонка (specs/004-group-calls FR-009)
+ */
+export function areaVisible(s: CallState, channelId: string | undefined, channels: readonly string[] = []): boolean {
     if (!channelId || s.phase === "idle" || s.phase === "incoming") return false;
-    return s.channelId === channelId;
+    return s.channelId === channelId || (s.phase !== "ended" && channels.includes(channelId));
 }
 
 /** Входящий звонок закончился без ответа: собеседник сбросил или вышел таймаут */

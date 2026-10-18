@@ -52,7 +52,7 @@ export function CallAreaSlot({ c, channel, height }: { c: CallController; channe
     const [h, setH] = useState(savedHeight);
     const { call } = v;
     // фазы idle/incoming уже отсечены areaVisible, проверка нужна для сужения типа
-    if (!channel || call.phase === "idle" || call.phase === "incoming" || !areaVisible(call, channel.id)) return null;
+    if (!channel || call.phase === "idle" || call.phase === "incoming" || !areaVisible(call, channel.id, v.channels)) return null;
     const maxH = Math.max(MIN_H, (height || 800) - 200);
     const areaH = Math.min(Math.max(h, MIN_H), maxH);
     const selfId = UserStore.getCurrentUser().id;
@@ -69,7 +69,6 @@ export function CallAreaSlot({ c, channel, height }: { c: CallController; channe
         window.addEventListener("mouseup", up);
     };
 
-    const peerVideo = v.remote.screen ?? v.remote.cam ?? null;
     const selfVideo = v.local.screen ?? v.local.cam ?? null;
     const connected = call.phase === "connected";
 
@@ -87,11 +86,15 @@ export function CallAreaSlot({ c, channel, height }: { c: CallController; channe
                     {v.stats.video.in && <div>↓ {videoLabel(v.stats.video.in)}</div>}
                 </div>
             )}
-            <div className="p2p-tiles">
+            <div className={classes("p2p-tiles", v.members.length > 1 && "p2p-tiles-grid")}>
                 <Tile userId={selfId} video={selfVideo} mirror={!!v.local.cam && !v.local.screen}
                     speaking={v.speaking.self} micOff={!v.local.mic} deafened={v.deafened} />
-                <Tile userId={call.peerId} video={peerVideo}
-                    speaking={v.speaking.peer} ringing={call.phase === "outgoing"} />
+                {(v.members.length || call.phase !== "ended" ? v.members : [{ userId: call.peerId, phase: null, remote: {}, speaking: false }]).map(m => (
+                    <Tile key={m.userId} userId={m.userId} video={m.remote.screen ?? m.remote.cam ?? null}
+                        speaking={m.speaking} ringing={m.phase === "outgoing"}
+                        // в группе связь с участником может не установиться, хотя он в звонке
+                        noLink={v.inCall && v.members.length > 1 && m.phase !== "connected"} />
+                ))}
             </div>
             {caption && <div className="p2p-caption">{caption}</div>}
             {call.phase !== "ended" && (

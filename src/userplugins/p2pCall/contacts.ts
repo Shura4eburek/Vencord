@@ -58,7 +58,8 @@ export function verificationCode(a: Uint8Array, b: Uint8Array): string {
  * mutual — у собеседника этот ключ тоже есть (видели его сообщение на ключе пары или он завершил обмен):
  * только тогда сигналинг идёт на ключе пары, а старая схема с этим пользователем отключается
  */
-export interface Device { deviceId: string; publicKey: string; addedAt: number; state: "trusted" | "pending"; mutual: boolean; }
+/** via — Discord ID участника, который передал ключ в групповом звонке (specs/004-group-calls R4); без via — свой обмен */
+export interface Device { deviceId: string; publicKey: string; addedAt: number; state: "trusted" | "pending"; mutual: boolean; via?: string; }
 export interface Contact { userId: string; name: string; avatar: string | null; channelId: string; devices: Device[]; addedAt: number; }
 export interface Store { load(): string | null; save(data: string): void; }
 export type AddResult = "trusted" | "pending" | "known";
@@ -80,7 +81,7 @@ export class ContactBook {
      * Первый ключ пользователя — доверенный; любой следующий (новое устройство, переустановка, подмена)
      * ждёт подтверждения (FR-005)
      */
-    addDevice(userId: string, d: { deviceId: string; publicKey: string; channelId: string; name?: string; avatar?: string | null; mutual?: boolean; }): AddResult {
+    addDevice(userId: string, d: { deviceId: string; publicKey: string; channelId: string; name?: string; avatar?: string | null; mutual?: boolean; via?: string; }): AddResult {
         const at = this.now();
         let c = this.contacts.get(userId);
         if (!c) {
@@ -89,13 +90,28 @@ export class ContactBook {
         }
         const known = c.devices.find(x => x.publicKey === d.publicKey);
         if (known) {
+            // свой обмен по общему ЛС подтвердил ключ, полученный через участника звонка
+            if (!d.via && (known.via || !c.channelId) && d.channelId) {
+                delete known.via;
+                c.channelId = d.channelId;
+                this.save();
+            }
             if (d.mutual) this.markMutual(userId, d.publicKey);
             return "known";
         }
         const state = c.devices.length ? "pending" : "trusted";
-        c.devices.push({ deviceId: d.deviceId, publicKey: d.publicKey, addedAt: at, state, mutual: !!d.mutual });
+        c.devices.push({ deviceId: d.deviceId, publicKey: d.publicKey, addedAt: at, state, mutual: !!d.mutual, ...d.via ? { via: d.via } : {} });
         this.save();
         return state;
+    }
+
+    /**
+     * Ключ участника группового звонка от добавившего (R4): правила те же — первый ключ доверенный, другой ключ
+     * известного контакта ждёт подтверждения. ЛС с ним может не быть — channelId пустой
+     */
+    introduce(via: string, k: { userId: string; deviceId: string; publicKey: string; name?: string; avatar?: string | null; }, ownPublicKey: string): AddResult | null {
+        if (k.publicKey === ownPublicKey || k.userId === via) return null;
+        return this.addDevice(k.userId, { deviceId: k.deviceId, publicKey: k.publicKey, channelId: "", name: k.name, avatar: k.avatar, via });
     }
 
     confirm(userId: string, publicKey: string) {

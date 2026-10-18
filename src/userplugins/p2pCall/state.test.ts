@@ -174,3 +174,10 @@ test("isMissedCall: incoming that ended by no-answer or remote hangup", () => {
     assert.equal(isMissedCall(inc, declined), false);
     assert.equal(isMissedCall(idle, byBye), false);
 });
+
+test("areaVisible: group call shows in the DM with every member", () => {
+    const s: CallState = { phase: "connected", ...peer };
+    assert.equal(areaVisible(s, "other", ["other"]), true);
+    assert.equal(areaVisible(s, "nope", ["other"]), false);
+    assert.equal(areaVisible({ phase: "ended", reason: "hangup", peerId: peer.peerId, channelId: peer.channelId }, "other", ["other"]), false);
+});

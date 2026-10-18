@@ -80,7 +80,7 @@ test("ring reaches the callee line with resolved ctx", async () => {
     assert.equal(b.got[0].msg.type, "ring");
     assert.equal(b.got[0].msg.from, A);
     assert.equal(b.got[0].msg.video, true);
-    assert.deepEqual(b.got[0].ctx, { channelId: CH, peerId: A });
+    assert.deepEqual(b.got[0].ctx, { channelId: CH, peerId: A, deviceId: "d".repeat(32) });
     assert.equal(a.got.length, 0);
 });
 
@@ -113,6 +113,27 @@ test("tun travels through the call room with its tunnel fields", async () => {
     await tick();
     const m = a.got[0].msg;
     assert.deepEqual([m.type, m.addr, m.token, m.upnp], ["tun", "178.158.220.104:40123", "0102030405060708", "ok"]);
+});
+
+test("group fields and types travel under the link key (specs/004-group-calls)", async () => {
+    const ws = hub();
+    const a = client(A, B, ws), b = client(B, A, ws);
+    a.sig.start(); b.sig.start();
+    await tick();
+    const roster = { entries: [{ userId: A, joinedAt: 1, by: A }, { userId: B, joinedAt: 2, by: A }], tombs: [] };
+    const key = { userId: "300", name: "c", avatar: null, deviceId: "e".repeat(32), publicKey: "f".repeat(64) };
+    a.sig.send({ channelId: CH, peerId: B }, "l1", { type: "ring", auto: true, caps: ["group"], group: { id: "g1", roster }, keys: [key] });
+    await tick();
+    const ring = b.got[0].msg;
+    assert.deepEqual([ring.auto, ring.caps, ring.group, ring.keys], [true, ["group"], { id: "g1", roster }, [key]]);
+
+    const ctxA = { channelId: CH, peerId: B }, ctxB = { channelId: CH, peerId: A };
+    a.sig.joinCall("l1", ctxA); b.sig.joinCall("l1", ctxB);
+    await tick();
+    for (const type of ["intro", "roster", "here", "leave"] as const) a.sig.send(ctxA, "l1", { type, groupId: "g1", key, seen: [[A, 0]] });
+    await tick();
+    assert.deepEqual(b.got.slice(1).map(g => g.msg.type), ["intro", "roster", "here", "leave"]);
+    assert.deepEqual(b.got[1].msg.key, key);
 });
 
 test("duplicate delivery via several relays is handled once", async () => {
@@ -204,7 +225,7 @@ test("ring to a contact uses the pair key and a hint unrelated to the channel id
     a.sig.send({ channelId: CH, peerId: B }, "c1", { type: "ring", video: false, channelId: CH });
     await tick();
     assert.equal(b.got.length, 1);
-    assert.deepEqual(b.got[0].ctx, { channelId: CH, peerId: A });
+    assert.deepEqual(b.got[0].ctx, { channelId: CH, peerId: A, deviceId: "d".repeat(32) });
     const c = seen[0].tags.find((t: string[]) => t[0] === "c")[1];
     assert.notEqual(c, legacyHint(CH), "no brute-forceable channel hash on the relay");
     assert.equal(c, pairHintOf(key(7), utcDay(Date.now())));

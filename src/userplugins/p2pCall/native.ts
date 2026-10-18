@@ -11,7 +11,8 @@ import { app, desktopCapturer, IpcMainInvokeEvent, safeStorage } from "electron"
 import { existsSync, readFileSync, renameSync, writeFileSync } from "fs";
 import { join } from "path";
 
-import { Contact, ContactBook, Device, Identity, newIdentity, pairKey, parseIdentity, serializeIdentity, verificationCode } from "./contacts";
+import { AddResult, Contact, ContactBook, Device, Identity, newIdentity, pairKey, parseIdentity, serializeIdentity, verificationCode } from "./contacts";
+import type { MemberKey } from "./group";
 import type { TunnelPrepared, TunnelStatus } from "./net";
 import { NetLoader } from "./netLoader";
 import { HandleResult, Pairing, PakeMsg, PeerInfo } from "./pairing";
@@ -113,7 +114,7 @@ app.on("before-quit", closeAll);
 
 const watched = new WeakSet<Electron.WebContents>();
 
-/** Новый модуль подхватывается только здесь — после закрытия туннеля прошлого звонка, не посреди звонка */
+/** Новый модуль подхватывается только здесь и только без открытых туннелей — не посреди звонка */
 export function tunnelPrepare(e: IpcMainInvokeEvent, callId: string): Promise<TunnelPrepared | null> {
     // Ctrl+R или падение рендерера: stop() плагина не выполнится, туннель и проброс закрываем сами
     if (!watched.has(e.sender)) {
@@ -121,9 +122,7 @@ export function tunnelPrepare(e: IpcMainInvokeEvent, callId: string): Promise<Tu
         e.sender.on("did-navigate", closeAll);
         e.sender.on("render-process-gone", closeAll);
     }
-    const cur = net.current();
-    if (cur?.activeCallId() === callId) return cur.prepare(callId);
-    cur?.closeAll();
+    // туннель на каждую связь группового звонка (specs/004-group-calls R10): другие связи не закрываем
     return net.get()?.prepare(callId) ?? Promise.resolve(null);
 }
 
@@ -238,6 +237,34 @@ export function contactsList(_: IpcMainInvokeEvent): ContactView[] {
 export function contactConfirm(_: IpcMainInvokeEvent, userId: string, publicKey: string) { keys?.book.confirm(userId, publicKey); }
 export function contactRemove(_: IpcMainInvokeEvent, userId: string, publicKey?: string) { keys?.book.remove(userId, publicKey); }
 export function contactProfile(_: IpcMainInvokeEvent, userId: string, name: string, avatar: string | null) { keys?.book.updateProfile(userId, name, avatar); }
+
+/** Ключи участников группового звонка от добавившего (specs/004-group-calls R4) */
+export function contactIntroduce(_: IpcMainInvokeEvent, via: string, list: MemberKey[]): { userId: string; result: AddResult; }[] {
+    if (!keys || !Array.isArray(list)) return [];
+    const own = bytesToHex(keys.id.publicKey);
+    const out: { userId: string; result: AddResult; }[] = [];
+    for (const k of list.slice(0, 8)) {
+        if (!k || typeof k.userId !== "string" || !/^\d{1,20}$/.test(k.userId) || !/^[0-9a-f]{32}$/.test(k.deviceId) || !/^[0-9a-f]{64}$/.test(k.publicKey)) continue;
+        const name = typeof k.name === "string" ? k.name.slice(0, 64) : undefined;
+        const avatar = typeof k.avatar === "string" && k.avatar.startsWith("https://") ? k.avatar : null;
+        const result = keys.book.introduce(via, { userId: k.userId, deviceId: k.deviceId, publicKey: k.publicKey, name, avatar }, own);
+        if (result) out.push({ userId: k.userId, result });
+    }
+    return out;
+}
+
+/** Ключ устройства контакта (им открыто сообщение) — передать остальным участникам звонка */
+export function memberKey(_: IpcMainInvokeEvent, userId: string, deviceId: string | null): { deviceId: string; publicKey: string; } | null {
+    const list = keys?.book.get(userId)?.devices.filter(x => x.state === "trusted") ?? [];
+    // устройство, с которого он сейчас в звонке; не знаем — первое доверенное
+    const d = list.find(x => x.deviceId === deviceId) ?? list[0];
+    return d ? { deviceId: d.deviceId, publicKey: d.publicKey } : null;
+}
+
+/** Свой ключ — для участников, которым нас представляют */
+export function ownMemberKey(_: IpcMainInvokeEvent): { deviceId: string; publicKey: string; } | null {
+    return keys ? { deviceId: keys.id.deviceId, publicKey: bytesToHex(keys.id.publicKey) } : null;
+}
 
 export function contactMutual(_: IpcMainInvokeEvent, userId: string, deviceId: string) {
     const d = keys?.book.get(userId)?.devices.find(x => x.deviceId === deviceId && x.state === "trusted");

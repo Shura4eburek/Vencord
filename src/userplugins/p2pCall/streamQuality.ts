@@ -41,6 +41,13 @@ export function trackConstraints(q: StreamQuality): MediaTrackConstraints {
     return q.height ? { height: { max: q.height }, frameRate: { max: q.fps } } : { frameRate: { max: q.fps } };
 }
 
+/** Ниже — демка уже не читается; GCC каждой связи снизит ещё, если канал не тянет */
+export const MIN_SHARE_BPS = 1_500_000;
+
+/** Потолок демки на одного получателя: исходящий канал делится на всех (specs/004-group-calls R9) */
+export const perReceiverBitrate = (bps: number, receivers: number) =>
+    receivers <= 1 ? bps : Math.max(MIN_SHARE_BPS, Math.floor(bps / receivers));
+
 export function encoderParams(q: StreamQuality) {
     const keepFps = q.prefer === "fps";
     return {

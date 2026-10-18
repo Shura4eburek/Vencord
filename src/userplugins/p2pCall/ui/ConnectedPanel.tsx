@@ -28,7 +28,7 @@ export function ConnectedPanel({ c }: { c: CallController; }) {
                     {connected ? "P2P подключено" : "P2P соединение…"}
                 </div>
                 <button className="p2p-plaque-peer" onClick={() => NavigationRouter.transitionTo(`/channels/@me/${call.channelId}`)}>
-                    {name}{connected && v.stats ? ` · ${v.stats.rttMs ?? "—"} мс · ${PATH_TEXT[v.stats.path]}` : ""}
+                    {name}{v.members.length > 1 ? ` и ещё ${v.members.length - 1}` : ""}{connected && v.stats ? ` · ${v.stats.rttMs ?? "—"} мс · ${PATH_TEXT[v.stats.path]}` : ""}
                 </button>
             </div>
             <div className="p2p-plaque-buttons">

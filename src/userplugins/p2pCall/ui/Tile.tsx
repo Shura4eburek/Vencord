@@ -17,6 +17,8 @@ interface TileProps {
     micOff?: boolean;
     deafened?: boolean;
     ringing?: boolean;
+    /** Участник в звонке, но связи с ним нет (specs/004-group-calls R7) */
+    noLink?: boolean;
 }
 
 function Video({ stream, mirror }: { stream: MediaStream; mirror?: boolean; }) {
@@ -34,17 +36,18 @@ function Video({ stream, mirror }: { stream: MediaStream; mirror?: boolean; }) {
     );
 }
 
-export function Tile({ userId, video, mirror, speaking, micOff, deafened, ringing }: TileProps) {
+export function Tile({ userId, video, mirror, speaking, micOff, deafened, ringing, noLink }: TileProps) {
     const user = UserStore.getUser(userId);
     const name = user?.globalName ?? user?.username ?? userId;
     const avatar = user?.getAvatarURL(undefined, 128);
     return (
-        <div className={classes("p2p-tile", speaking && "p2p-speaking", ringing && "p2p-ringing")}>
+        <div className={classes("p2p-tile", speaking && "p2p-speaking", ringing && "p2p-ringing", noLink && "p2p-nolink")}>
             {video
                 ? <Video stream={video} mirror={mirror} />
                 : <img className="p2p-avatar" src={avatar} alt="" />}
             <div className="p2p-tile-label">
                 <span>{name}</span>
+                {noLink && <span className="p2p-tile-status">соединение…</span>}
                 {micOff && <MicOffIcon width={16} height={16} className="p2p-tile-badge" />}
                 {deafened && <HeadphonesOffIcon width={16} height={16} className="p2p-tile-badge" />}
             </div>

@@ -7,7 +7,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { captureConstraints, DEFAULT_QUALITY, displayMediaConstraints, encoderParams, FPS_OPTIONS, fpsAllowed, heightLabel, hzFromIntervals, needsRecapture, sanitizeQuality, trackConstraints } from "./streamQuality";
+import { captureConstraints, DEFAULT_QUALITY, displayMediaConstraints, encoderParams, FPS_OPTIONS, fpsAllowed, heightLabel, hzFromIntervals, MIN_SHARE_BPS, needsRecapture, perReceiverBitrate, sanitizeQuality, trackConstraints } from "./streamQuality";
 
 test("defaults: source resolution, 60 fps, 20 Mbps, keep fps", () => {
     assert.deepEqual(DEFAULT_QUALITY, { height: 0, fps: 60, maxMbps: 20, prefer: "fps" });
@@ -76,4 +76,10 @@ test("saved 120/144 from older versions fall back to 60", () => {
 test("display media constraints", () => {
     assert.deepEqual(displayMediaConstraints({ height: 1440, fps: 60, maxMbps: 80, prefer: "fps" }), { height: { max: 1440 }, frameRate: { ideal: 60, max: 60 } });
     assert.deepEqual(displayMediaConstraints({ height: 0, fps: 30, maxMbps: 80, prefer: "fps" }), { frameRate: { ideal: 30, max: 30 } });
+});
+
+test("per-receiver bitrate splits the ceiling with a floor", () => {
+    assert.equal(perReceiverBitrate(20_000_000, 1), 20_000_000);
+    assert.equal(perReceiverBitrate(20_000_000, 4), 5_000_000);
+    assert.equal(perReceiverBitrate(4_000_000, 4), MIN_SHARE_BPS);
 });

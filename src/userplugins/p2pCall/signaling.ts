@@ -8,20 +8,41 @@ import { finalizeEvent, generateSecretKey } from "nostr-tools/pure";
 
 import { pairHintOf, utcDay } from "./contacts";
 import { newMsgId, open, seal, topicCall, topicLine } from "./crypto";
+import type { MemberKey, RosterWire } from "./group";
 import type { PakeMsg } from "./pairing";
 import { NostrEvent, RelayConn, WsFactory } from "./relay";
 
 export const KIND = 25050;
 export const MAX_AGE_MS = 30_000;
 
-export type SignalType = "ring" | "accept" | "decline" | "offer" | "answer" | "ice" | "bye" | "tun" | "pairok";
+export type SignalType = "ring" | "accept" | "decline" | "offer" | "answer" | "ice" | "bye" | "tun" | "pairok"
+    // групповой звонок (specs/004-group-calls/contracts/group-signaling.md); старая версия их игнорирует
+    | "intro" | "roster" | "here" | "leave";
 export interface SignalMsg {
     type: SignalType; msgId: string; callId: string; from: string; ts: number;
     channelId?: string; video?: boolean; sdp?: string; candidate?: RTCIceCandidateInit | null; reason?: string;
     /** tun: адрес туннеля этой стороны (specs/001-udp-tunnel-upnp/contracts/tunnel.md §1) */
     addr?: string | null; token?: string; upnp?: string; upnpCode?: number | null;
+    /** ring/accept: что умеет версия собеседника (`group`) */
+    caps?: string[];
+    /** ring/accept/roster: групповой звонок и его состав */
+    group?: { id: string; roster: RosterWire; };
+    /** ring (приглашение) и accept («Добавить сюда»): ключи текущих участников */
+    keys?: MemberKey[];
+    /** intro: ключ нового участника */
+    key?: MemberKey;
+    /** ring внутри своей группы — принять без окна */
+    auto?: boolean;
+    /** intro/here/leave */
+    groupId?: string;
+    /**
+     * here: [userId, сколько мс назад отправитель о нём слышал] — участник не пропал, даже если связи с ним нет.
+     * Давность, а не «слышал»: иначе двое пересказывали бы друг другу о пропавшем вечно
+     */
+    seen?: [string, number][];
 }
-export interface PeerCtx { channelId: string; peerId: string; }
+/** deviceId — устройство, чьим ключом пары открыто сообщение */
+export interface PeerCtx { channelId: string; peerId: string; deviceId?: string; }
 /** Ключ пары с одним доверенным устройством контакта (specs/003-identity-keys R3, R7) */
 export interface PairKey { userId: string; deviceId: string; channelId: string; key: Uint8Array; mutual: boolean; }
 export interface SignalingOptions {
@@ -175,7 +196,7 @@ export class Signaling {
         if (used && !used.mutual) this.o.onMutual?.(used);
         if (msg.type === "pairok" || (onLine && msg.type !== "ring")) return;
 
-        this.o.onMessage(msg, ctx);
+        this.o.onMessage(msg, used ? { ...ctx, deviceId: used.deviceId } : ctx);
     }
 
     private onPakeEvent(ev: NostrEvent) {

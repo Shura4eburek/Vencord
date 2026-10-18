@@ -15,16 +15,16 @@ import { NetLoader } from "./netLoader";
 /** Настоящий CommonJS-модуль на диске: версия видна в status(), активный звонок задаётся через prepare/close */
 function moduleSource(version: string) {
     return `exports.createNet = () => {
-        let active = null;
+        const active = new Set();
         globalThis.__p2pDisposed ??= [];
         return {
-            prepare: async id => { active = id; return null; },
+            prepare: async id => { active.add(id); return null; },
             setPeer: async () => {},
             status: () => ({ version: ${JSON.stringify(version)} }),
-            close: id => { if (active === id) active = null; },
-            closeAll: () => { active = null; },
-            activeCallId: () => active,
-            dispose: () => { globalThis.__p2pDisposed.push(${JSON.stringify(version)}); active = null; },
+            close: id => { active.delete(id); },
+            closeAll: () => { active.clear(); },
+            activeCallId: () => active.values().next().value ?? null,
+            dispose: () => { globalThis.__p2pDisposed.push(${JSON.stringify(version)}); active.clear(); },
         };
     };`;
 }
@@ -63,6 +63,21 @@ test("a call in progress keeps the old module until it ends", async () => {
     assert.equal(version(l), "A", "not swapped mid-call");
 
     l.current()!.close("call-1");
+    l.get();
+    assert.equal(version(l), "B");
+});
+
+test("group call: no swap until every link's tunnel is closed", async () => {
+    const path = join(mkdtempSync(join(tmpdir(), "p2p-net-")), "p2pcall-net.js");
+    write(path, moduleSource("A"));
+    const l = new NetLoader(path, { userData: "x" });
+    await l.get()!.prepare("link-1");
+    await l.get()!.prepare("link-2");
+    write(path, moduleSource("B"));
+    l.current()!.close("link-1");
+    l.get();
+    assert.equal(version(l), "A", "link-2 still open");
+    l.current()!.close("link-2");
     l.get();
     assert.equal(version(l), "B");
 });

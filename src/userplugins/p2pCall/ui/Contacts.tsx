@@ -5,7 +5,7 @@
  */
 
 import { PluginNative } from "@utils/types";
-import { Button, useEffect, useState } from "@webpack/common";
+import { Button, useEffect, UserStore, useState } from "@webpack/common";
 
 import type { ContactView } from "../native";
 
@@ -38,6 +38,7 @@ export function ContactsList() {
                             <div className="p2p-device-code">
                                 <span>Код шифрования</span>
                                 <div>{d.code.split(" ").map((g, i) => <code key={i}>{g}</code>)}</div>
+                                {d.via && <div className="p2p-device-via">получен через {UserStore.getUser(d.via)?.username ?? list.find(x => x.userId === d.via)?.name ?? d.via} (групповой звонок)</div>}
                             </div>
                             {d.state === "pending" &&
                                 <>

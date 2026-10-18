@@ -11,40 +11,61 @@ import { Modal, openModal, useEffect, UserStore } from "@webpack/common";
 import type { CallController } from "../controller";
 import { useCallView } from "./useCallView";
 
-function IncomingCall({ c, modal }: { c: CallController; modal: RenderModalProps; }) {
-    const v = useCallView(c);
-    const { call } = v;
-    const incoming = call.phase === "incoming";
-    useEffect(() => { if (!incoming) modal.onClose(); }, [incoming]);
-    if (!incoming) return null;
+const nameOf = (id: string) => {
+    const u = UserStore.getUser(id);
+    return u?.globalName ?? u?.username ?? id;
+};
 
-    const user = UserStore.getUser(call.peerId);
-    const name = user?.globalName ?? user?.username ?? call.peerId;
-    // крестик/Esc/клик мимо — иначе звонок остаётся входящим, а ответить уже негде
-    const dismiss = () => { if (c.view.call.phase === "incoming") c.decline(); modal.onClose(); };
+/** Окно на каждый входящий: первый звонок или во время звонка (specs/004-group-calls US1) */
+function IncomingCall({ c, linkId, modal }: { c: CallController; linkId: string; modal: RenderModalProps; }) {
+    const v = useCallView(c);
+    const inv = v.invites.find(i => i.linkId === linkId);
+    useEffect(() => { if (!inv) modal.onClose(); }, [!inv]);
+    // Esc в модалках Discord закрывает их мимо onClose — отклоняем по нему сами
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") c.decline(linkId); };
+        window.addEventListener("keydown", onKey, true);
+        return () => window.removeEventListener("keydown", onKey, true);
+    }, []);
+    if (!inv) return null;
+
+    const user = UserStore.getUser(inv.from);
+    const name = nameOf(inv.from);
+    // крестик/клик мимо — иначе звонок остаётся входящим, а ответить уже негде
+    const dismiss = () => { c.decline(linkId); modal.onClose(); };
+    const group = inv.members.length ? `Групповой звонок: ${[name, ...inv.members.filter(m => m !== inv.from).map(nameOf)].join(", ")}` : null;
+    const subtitle = group ?? (inv.video ? `${name} звонит с видео` : `${name} звонит`);
+    const actions = v.inCall
+        ? [
+            { text: "Отклонить", variant: "secondary" as const, onClick: () => c.decline(linkId) },
+            { text: "Положить текущий и принять", variant: "secondary" as const, onClick: () => c.replaceWith(linkId) },
+            { text: "Добавить сюда", variant: "primary" as const, disabled: !!inv.addBlocked, onClick: () => { c.addHere(linkId); } },
+        ]
+        : [
+            { text: "Отклонить", variant: "secondary" as const, onClick: () => c.decline(linkId) },
+            { text: "Принять с видео", variant: "secondary" as const, onClick: () => c.accept(linkId, true) },
+            { text: "Принять", variant: "primary" as const, onClick: () => c.accept(linkId, false) },
+        ];
     return (
         <Modal
             {...modal}
             onClose={dismiss}
-            title="Входящий P2P-звонок"
-            subtitle={call.video ? `${name} звонит с видео` : `${name} звонит`}
-            actions={[
-                { text: "Отклонить", variant: "secondary", onClick: () => c.decline() },
-                { text: "Принять с видео", variant: "secondary", onClick: () => c.accept(true) },
-                { text: "Принять", variant: "primary", onClick: () => c.accept(false) },
-            ]}
+            title={v.inCall ? "Входящий P2P-звонок во время звонка" : "Входящий P2P-звонок"}
+            subtitle={subtitle}
+            actions={actions}
         >
             <div className="p2p-incoming">
                 <img className="p2p-incoming-avatar" src={user?.getAvatarURL(undefined, 128)} alt="" />
+                {v.inCall && inv.addBlocked && <div className="p2p-incoming-note">{inv.addBlocked}</div>}
             </div>
         </Modal>
     );
 }
 
-export function openIncomingCall(c: CallController) {
+export function openIncomingCall(c: CallController, linkId: string) {
     openModal(modal => (
         <ErrorBoundary>
-            <IncomingCall c={c} modal={modal} />
+            <IncomingCall c={c} linkId={linkId} modal={modal} />
         </ErrorBoundary>
     ));
 }

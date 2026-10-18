@@ -28,6 +28,7 @@ export interface NetApi {
     status(callId: string): TunnelStatus | null;
     close(callId: string): void;
     closeAll(): void;
+    /** Любой открытый туннель (в групповом звонке их несколько): пока он есть, модуль не перезагружается */
     activeCallId(): string | null;
     /** Перед заменой модуля новой версией */
     dispose(): void;
@@ -46,7 +47,8 @@ function localIps() {
 }
 
 export function createNet(env: NetEnv): NetApi {
-    let active: ActiveTunnel | null = null;
+    // туннель на каждую связь группового звонка (specs/004-group-calls R10)
+    const active = new Map<string, ActiveTunnel>();
     // описание роутера не меняется — второй звонок не ждёт SSDP
     let igdCache: { lanIp: string; igd: Igd; } | null = null;
 
@@ -56,8 +58,26 @@ export function createNet(env: NetEnv): NetApi {
      */
     const staleFile = join(env.userData, "p2pcall-upnp.json");
 
+    type Saved = { port: number; igd: Igd; };
+    /** Прежний формат — один объект, теперь список (по пробросу на связь) */
+    function readSaved(): Saved[] {
+        try {
+            const raw = JSON.parse(readFileSync(staleFile, "utf8"));
+            return Array.isArray(raw) ? raw : raw ? [raw] : [];
+        } catch {
+            return [];
+        }
+    }
+
+    function writeSaved(list: Saved[]) {
+        try {
+            if (list.length) writeFileSync(staleFile, JSON.stringify(list));
+            else rmSync(staleFile, { force: true });
+        } catch { }
+    }
+
     function rememberMapping(m: PortMapping) {
-        try { writeFileSync(staleFile, JSON.stringify({ port: m.port, igd: m.igd })); } catch { }
+        writeSaved([...readSaved().filter(x => x.port !== m.port), { port: m.port, igd: m.igd }]);
     }
 
     /**
@@ -65,22 +85,21 @@ export function createNet(env: NetEnv): NetApi {
      * проброс уже тогда, когда новый записал в тот же файл свой.
      */
     function forgetMapping(port: number, controlUrl: string) {
-        try {
-            const saved = JSON.parse(readFileSync(staleFile, "utf8"));
-            if (saved?.port === port && saved.igd?.controlUrl === controlUrl) rmSync(staleFile, { force: true });
-        } catch { }
+        writeSaved(readSaved().filter(x => !(x.port === port && x.igd?.controlUrl === controlUrl)));
     }
 
-    function dropStaleMapping() {
-        let saved: { port: number; igd: Igd; };
-        try { saved = JSON.parse(readFileSync(staleFile, "utf8")); } catch { return; }
-        if (typeof saved?.port !== "number" || typeof saved.igd?.controlUrl !== "string") { rmSync(staleFile, { force: true }); return; }
-        // запись стираем, только если роутер подтвердил удаление, — иначе попробуем в следующий раз
-        deletePortMapping(saved.igd, saved.port, upnpDeps).then(ok => { if (ok) forgetMapping(saved.port, saved.igd.controlUrl); });
+    /** Только при первом туннеле: пробросы идущих связей зависшими не считаются */
+    function dropStaleMappings() {
+        if (active.size > 1) return;
+        for (const saved of readSaved()) {
+            if (typeof saved?.port !== "number" || typeof saved.igd?.controlUrl !== "string") { forgetMapping(saved?.port, saved?.igd?.controlUrl); continue; }
+            // запись стираем, только если роутер подтвердил удаление, — иначе попробуем в следующий раз
+            deletePortMapping(saved.igd, saved.port, upnpDeps).then(ok => { if (ok) forgetMapping(saved.port, saved.igd.controlUrl); });
+        }
     }
 
     async function buildTunnel(a: ActiveTunnel): Promise<TunnelPrepared | null> {
-        dropStaleMapping();
+        dropStaleMappings();
         const lanIp = await defaultLanIp(udp);
         if (!lanIp) return null;
         const igd = igdCache?.lanIp === lanIp
@@ -112,36 +131,36 @@ export function createNet(env: NetEnv): NetApi {
         return null;
     }
 
-    function closeActive() {
-        const a = active;
-        if (!a) return;
-        active = null;
+    function closeOne(a: ActiveTunnel) {
+        if (active.get(a.callId) === a) active.delete(a.callId);
         a.closed = true;
         a.tunnel?.close();
         const m = a.mapping;
         if (m) m.close().then(ok => { if (ok) forgetMapping(m.port, m.igd.controlUrl); });
     }
 
+    const closeAll = () => { for (const a of [...active.values()]) closeOne(a); };
+
     return {
-        /** Идемпотентно для одного callId; новый звонок закрывает туннель прошлого. null — туннель не поднялся */
+        /** Идемпотентно для одного callId; туннели других связей не трогает. null — туннель не поднялся */
         prepare(callId) {
-            if (active?.callId === callId) return active.ready;
-            closeActive();
+            const cur = active.get(callId);
+            if (cur) return cur.ready;
             const a: ActiveTunnel = { callId, closed: false, ready: Promise.resolve(null) };
+            active.set(callId, a);
             a.ready = buildTunnel(a).catch(() => null);
-            active = a;
             return a.ready;
         },
         async setPeer(callId, peer) {
-            const a = active;
-            if (a?.callId !== callId || !/^[0-9a-f]{16}$/.test(peer.token) || !isPeerAddr(peer.addr, localIps())) return;
+            const a = active.get(callId);
+            if (!a || !/^[0-9a-f]{16}$/.test(peer.token) || !isPeerAddr(peer.addr, localIps())) return;
             await a.ready;
             if (!a.closed) a.tunnel?.setPeer(peer.addr, Buffer.from(peer.token, "hex"));
         },
-        status: callId => active?.callId === callId ? active.tunnel?.status() ?? null : null,
-        close(callId) { if (active?.callId === callId) closeActive(); },
-        closeAll: closeActive,
-        activeCallId: () => active?.callId ?? null,
-        dispose: closeActive,
+        status: callId => active.get(callId)?.tunnel?.status() ?? null,
+        close(callId) { const a = active.get(callId); if (a) closeOne(a); },
+        closeAll,
+        activeCallId: () => active.keys().next().value ?? null,
+        dispose: closeAll,
     };
 }

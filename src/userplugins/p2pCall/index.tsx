@@ -81,7 +81,7 @@ export default definePlugin({
             }),
             warn: text => showToast(text, Toasts.Type.FAILURE),
             info: text => showToast(text, Toasts.Type.MESSAGE),
-            onIncoming: () => openIncomingCall(c),
+            onIncoming: linkId => openIncomingCall(c, linkId),
             inVoiceChannel: () => !!SelectedChannelStore.getVoiceChannelId(),
             dmPeers: () => ChannelStore.getSortedPrivateChannels()
                 .filter(ch => ch.isDM() && ch.recipients.length === 1)
@@ -92,7 +92,7 @@ export default definePlugin({
             },
             newKey: userId => showNotification({
                 title: "Новый ключ P2P",
-                body: `У ${UserStore.getUser(userId)?.username ?? userId} новый ключ — новое устройство или подмена. Сверь код проверки в настройках P2PCall и подтверди`,
+                body: `У ${UserStore.getUser(userId)?.username ?? userId} новый ключ — новое устройство или подмена. Уточни у собеседника и подтверди в настройках P2PCall`,
                 permanent: true,
             }),
         });

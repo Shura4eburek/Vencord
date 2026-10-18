@@ -38,6 +38,32 @@
     transition: box-shadow 0.1s;
 }
 
+/* 3–5 участников: сетка, плитки уменьшаются по высоте области (specs/004-group-calls) */
+.p2p-tiles-grid {
+    flex-wrap: wrap;
+    align-content: center;
+}
+
+.p2p-tiles-grid .p2p-tile {
+    height: calc(50% - 6px);
+    max-width: calc(33% - 8px);
+}
+
+.p2p-tiles-grid .p2p-avatar {
+    width: 56px;
+    height: 56px;
+}
+
+.p2p-nolink {
+    opacity: 0.6;
+}
+
+.p2p-tile-status {
+    margin-left: 6px;
+    font-size: 12px;
+    color: #b5bac1;
+}
+
 .p2p-speaking {
     box-shadow: 0 0 0 2px #23a55a;
 }
@@ -238,8 +264,17 @@
 
 .p2p-incoming {
     display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
     justify-content: center;
     padding: 16px 0;
+}
+
+.p2p-incoming-note {
+    color: var(--text-muted);
+    font-size: 13px;
+    text-align: center;
 }
 
 .p2p-incoming-avatar {
@@ -388,6 +423,7 @@
 .p2p-device { display: flex; align-items: center; gap: 10px; color: var(--text-normal); font-size: 13px; }
 .p2p-device-code { display: flex; flex-direction: column; gap: 4px; }
 .p2p-device-code > span { color: var(--text-muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .02em; }
+.p2p-device-via { color: var(--text-muted); font-size: 12px; }
 .p2p-device-code > div { display: flex; gap: 6px; }
 .p2p-device-code code { padding: 3px 8px; border-radius: 4px; background: var(--background-tertiary); color: var(--header-primary); font-family: var(--font-code); font-size: 15px; letter-spacing: 2px; }
 .p2p-device-pending { color: var(--text-warning, #f0b232); }

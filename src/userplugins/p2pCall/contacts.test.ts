@@ -81,3 +81,23 @@ test("both sides derive the same pair key, hint and verification code", () => {
     const c = newIdentity();
     assert.notEqual(verificationCode(a.publicKey, c.publicKey), verificationCode(a.publicKey, b.publicKey));
 });
+
+test("introduced keys: trusted for a new contact, pending on another key, own key skipped, own exchange wins", () => {
+    const b = new ContactBook(memory());
+    assert.equal(b.introduce("9", { userId: "3", deviceId: "c".repeat(32), publicKey: "k3", name: "doomer" }, "own"), "trusted");
+    const c = b.get("3")!;
+    assert.deepEqual([c.channelId, c.devices[0].via, c.name], ["", "9", "doomer"]);
+    assert.equal(b.introduce("9", { userId: "3", deviceId: "d".repeat(32), publicKey: "k4" }, "own"), "pending");
+    assert.equal(b.introduce("9", { userId: "5", deviceId: "e".repeat(32), publicKey: "own" }, "own"), null);
+    assert.equal(b.introduce("9", { userId: "9", deviceId: "e".repeat(32), publicKey: "k9" }, "own"), null);
+
+    // свой обмен по ЛС тем же ключом: via снимается, появляется ЛС
+    assert.equal(b.addDevice("3", { ...dev("k3", "c".repeat(32)) }), "known");
+    assert.equal(b.get("3")!.devices[0].via, undefined);
+    assert.equal(b.get("3")!.channelId, "700000000000000003");
+
+    // ключ из своего обмена представлением не перезаписывается
+    b.addDevice("4", dev("k5"));
+    assert.equal(b.introduce("9", { userId: "4", deviceId: "a".repeat(32), publicKey: "k5" }, "own"), "known");
+    assert.equal(b.get("4")!.devices[0].via, undefined);
+});

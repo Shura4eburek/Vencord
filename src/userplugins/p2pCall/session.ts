@@ -7,7 +7,7 @@
 import { Caps, chooseCodec, CodecChoice, isCaps, orderCodecs } from "./codecs";
 import { DEFAULT_OPUS, tuneOpus, tuneVideo } from "./sdp";
 import { CallStats, Counters, summarizeStats } from "./stats";
-import { DEFAULT_QUALITY, encoderParams, StreamQuality } from "./streamQuality";
+import { DEFAULT_QUALITY, encoderParams, perReceiverBitrate, StreamQuality } from "./streamQuality";
 import { tunnelCandidate } from "./tunnelWire";
 
 export type TrackKind = "mic" | "cam" | "screen";
@@ -24,6 +24,12 @@ export const ICE_SERVERS: RTCIceServer[] = [
 ];
 
 const CAM_MAX_BITRATE = 6_000_000;
+
+/** При нехватке канала браузер режет видео, а не голос (specs/004-group-calls R9) */
+function setPriority(p: RTCRtpSendParameters, high: boolean) {
+    const e = p.encodings[0] as RTCRtpEncodingParameters & { priority?: string; networkPriority?: string; };
+    e.priority = e.networkPriority = high ? "high" : "low";
+}
 
 export interface SessionOptions { ownCaps: Promise<Caps>; codec: () => CodecChoice; }
 const tuneSdp = (sdp: string) => tuneVideo(tuneOpus(sdp, DEFAULT_OPUS));
@@ -46,6 +52,8 @@ export class Session {
     private remoteKinds = new Map<string, TrackKind>();
     private remoteStreams = new Map<string, MediaStream>();
     private quality: StreamQuality = DEFAULT_QUALITY;
+    /** Сколько человек получают нашу демку: потолок битрейта делится на всех */
+    private receivers = 1;
     private own: Caps | null = null;
     private peer: Caps | null = null;
     private chosen: string | null = null;
@@ -90,13 +98,13 @@ export class Session {
         };
     }
 
+    /** Треки общие для всех связей группового звонка: останавливает их контроллер, не сессия */
     async setTrack(kind: TrackKind, stream: MediaStream | null) {
         const old = this.senders.get(kind);
         if (old) {
             this.pc.removeTrack(old);
             this.senders.delete(kind);
         }
-        this.local.get(kind)?.getTracks().forEach(t => t.stop());
         this.local.delete(kind);
         if (stream) {
             const track = stream.getTracks()[0];
@@ -109,31 +117,32 @@ export class Session {
                 const caps = RTCRtpReceiver.getCapabilities("video")?.codecs ?? [];
                 tr?.setCodecPreferences(orderCodecs(caps, this.chosen));
                 await this.applyScreenParams();
-            } else if (kind === "cam") {
-                // x-google-max-bitrate в SDP снимает лимит и с камеры — держим её отдельным потолком
+            } else {
                 const p = sender.getParameters();
                 if (!p.encodings?.length) p.encodings = [{}];
-                p.encodings[0].maxBitrate = CAM_MAX_BITRATE;
-                await sender.setParameters(p).catch(err => console.warn("[P2PCall] cam setParameters", err));
+                // x-google-max-bitrate в SDP снимает лимит и с камеры — держим её отдельным потолком
+                if (kind === "cam") p.encodings[0].maxBitrate = CAM_MAX_BITRATE;
+                setPriority(p, kind === "mic");
+                await sender.setParameters(p).catch(err => console.warn(`[P2PCall] ${kind} setParameters`, err));
             }
         }
         this.sendKinds();
     }
 
-    async setScreenQuality(q: StreamQuality) {
+    async setScreenQuality(q: StreamQuality, receivers = this.receivers) {
         this.quality = q;
+        this.receivers = receivers;
         await this.applyScreenParams();
     }
 
-    /** Новый трек захвата в тот же MediaStream: id потока у собеседника не меняется, пересогласование не нужно */
+    /**
+     * Новый трек захвата: id потока у собеседника не меняется, пересогласование не нужно. Сам MediaStream
+     * (общий для всех связей) обновляет контроллер
+     */
     async replaceScreenTrack(track: MediaStreamTrack) {
         const sender = this.senders.get("screen");
-        const stream = this.local.get("screen");
-        if (!sender || !stream) { track.stop(); return; }
+        if (!sender) return;
         await sender.replaceTrack(track);
-        // старые треки читаем после await: параллельная замена могла успеть положить свой
-        for (const old of stream.getVideoTracks()) { stream.removeTrack(old); old.stop(); }
-        stream.addTrack(track);
         await this.applyScreenParams();
     }
 
@@ -152,7 +161,8 @@ export class Session {
         sender.track.contentHint = e.contentHint;
         const p = sender.getParameters();
         if (!p.encodings?.length) p.encodings = [{}];
-        p.encodings[0].maxBitrate = e.maxBitrate;
+        p.encodings[0].maxBitrate = perReceiverBitrate(e.maxBitrate, this.receivers);
+        setPriority(p, false);
         p.encodings[0].maxFramerate = e.maxFramerate;
         (p as any).degradationPreference = e.degradationPreference;
         await sender.setParameters(p).catch(err => console.warn("[P2PCall] setParameters", err));
@@ -228,7 +238,6 @@ export class Session {
     }
 
     close() {
-        for (const s of this.local.values()) s.getTracks().forEach(t => t.stop());
         this.local.clear();
         this.ctl.close();
         this.pc.close();
