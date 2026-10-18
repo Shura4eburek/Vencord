@@ -91,6 +91,25 @@ export function netMissing(_: IpcMainInvokeEvent) {
     return !existsSync(join(__dirname, NET_FILE));
 }
 
+/** Сколько ждать после закрытия DevTools: Discord возвращает токен в Local Storage по событию из main */
+const DEVTOOLS_CLOSE_WAIT_MS = 1000;
+
+/**
+ * Перезапуск Discord без разлогина. Пока открыты DevTools, Discord убирает токен из Local Storage и возвращает
+ * при их закрытии или штатном закрытии окна (то же описывает Vencord-плагин NoDevtoolsWarning). Его собственный
+ * DiscordNative.app.relaunch делает app.exit(0) — штатное закрытие пропускается, токена на диске нет. Поэтому:
+ * закрыть DevTools, дать токену вернуться, сбросить хранилище и выйти через quit, как «Выйти» в трее.
+ */
+export async function relaunch(e: IpcMainInvokeEvent) {
+    const wc = e.sender;
+    if (wc.isDevToolsOpened()) {
+        wc.closeDevTools();
+        await new Promise(r => setTimeout(r, DEVTOOLS_CLOSE_WAIT_MS));
+    }
+    wc.session.flushStorageData();
+    app.relaunch();
+    app.quit();
+}
 
 // ── UDP-туннель (specs/001-udp-tunnel-upnp/contracts/tunnel.md §2) ──
 // Сам туннель — в dist/p2pcall-net.js (net.ts): его код не должен попасть в patcher.js, иначе каждая его

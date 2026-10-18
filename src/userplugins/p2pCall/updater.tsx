@@ -19,6 +19,14 @@ const EVERY_MS = 6 * 60 * 60 * 1000;
 let firstTimer: ReturnType<typeof setTimeout> | undefined;
 let everyTimer: ReturnType<typeof setInterval> | undefined;
 
+/**
+ * Перезапуск — свой, не DiscordNative.app.relaunch: тот делает app.exit(0) и при открытых DevTools разлогинивает
+ * (подробности у native.relaunch)
+ */
+function relaunchDiscord() {
+    Native.relaunch();
+}
+
 /** Что показать пользователю (specs/002-update-apply-modes/contracts/update.md §3) */
 const ACTION_TEXT: Record<Action, string> = {
     none: "ничего делать не нужно",
@@ -34,11 +42,9 @@ function notify(version: string | null, action: Action) {
     }
     showNotification({
         title: head,
-        // перезапуск из плагина (и app.exit, и штатный DiscordNative.app.relaunch) разлогинивал аккаунт —
-        // Discord перезапускают руками, через трей
-        body: action === "reload" ? "Нажми, чтобы перезагрузить окно (пара секунд, вход сохранится)" : "Перезапусти Discord: трей → «Выйти», затем запусти снова",
+        body: action === "reload" ? "Нажми, чтобы перезагрузить окно (пара секунд, вход сохранится)" : "Нажми, чтобы перезапустить Discord",
         permanent: true,
-        onClick: action === "reload" ? () => location.reload() : undefined,
+        onClick: action === "reload" ? () => location.reload() : relaunchDiscord,
     });
 }
 
