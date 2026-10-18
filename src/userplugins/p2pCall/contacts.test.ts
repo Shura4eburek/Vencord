@@ -38,16 +38,14 @@ test("mutual is set on add or later, never lost", () => {
     assert.equal(b.get("2")!.devices[0].mutual, true);
 });
 
-test("verified flag, device and contact removal, persistence", () => {
+test("device and contact removal, persistence", () => {
     const store = memory();
     const b = new ContactBook(store);
     b.addDevice("1", dev("k1"));
     b.addDevice("1", dev("k2"));
-    b.setVerified("1", "k1", true);
     b.updateProfile("1", "doomer", "https://cdn/a.png");
 
     const again = new ContactBook(store);
-    assert.equal(again.get("1")!.devices[0].verified, true);
     assert.equal(again.get("1")!.name, "doomer");
 
     again.remove("1", "k2");

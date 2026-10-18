@@ -45,7 +45,7 @@ export const utcDay = (now: number) => Math.floor(now / 86_400_000);
 /** Тег `c` в ring контакту: меняется каждый день и ничего не говорит без ключа пары (research R7) */
 export const pairHintOf = (key: Uint8Array, day: number) => bytesToHex(hmac(sha256, key, utf8ToBytes(`hint:${day}`))).slice(0, 32);
 
-/** 8 цифр, одинаковые у обоих: сверка голосом ловит подмену ключа даже самим Discord */
+/** 8 цифр, одинаковые у обоих: только для сведения, как код шифрования в Telegram (26 бит — от подбора Discord не защищает) */
 export function verificationCode(a: Uint8Array, b: Uint8Array): string {
     const [lo, hi] = bytesToHex(a) < bytesToHex(b) ? [a, b] : [b, a];
     const h = sha256(concatBytes(utf8ToBytes("p2pcall-v2 code"), lo, hi));
@@ -58,7 +58,7 @@ export function verificationCode(a: Uint8Array, b: Uint8Array): string {
  * mutual — у собеседника этот ключ тоже есть (видели его сообщение на ключе пары или он завершил обмен):
  * только тогда сигналинг идёт на ключе пары, а старая схема с этим пользователем отключается
  */
-export interface Device { deviceId: string; publicKey: string; addedAt: number; state: "trusted" | "pending"; verified: boolean; mutual: boolean; }
+export interface Device { deviceId: string; publicKey: string; addedAt: number; state: "trusted" | "pending"; mutual: boolean; }
 export interface Contact { userId: string; name: string; avatar: string | null; channelId: string; devices: Device[]; addedAt: number; }
 export interface Store { load(): string | null; save(data: string): void; }
 export type AddResult = "trusted" | "pending" | "known";
@@ -93,7 +93,7 @@ export class ContactBook {
             return "known";
         }
         const state = c.devices.length ? "pending" : "trusted";
-        c.devices.push({ deviceId: d.deviceId, publicKey: d.publicKey, addedAt: at, state, verified: false, mutual: !!d.mutual });
+        c.devices.push({ deviceId: d.deviceId, publicKey: d.publicKey, addedAt: at, state, mutual: !!d.mutual });
         this.save();
         return state;
     }
@@ -106,11 +106,6 @@ export class ContactBook {
     markMutual(userId: string, publicKey: string) {
         const d = this.device(userId, publicKey);
         if (d && !d.mutual) { d.mutual = true; this.save(); }
-    }
-
-    setVerified(userId: string, publicKey: string, verified: boolean) {
-        const d = this.device(userId, publicKey);
-        if (d && d.verified !== verified) { d.verified = verified; this.save(); }
     }
 
     /** Без publicKey — весь контакт */

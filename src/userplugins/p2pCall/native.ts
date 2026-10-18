@@ -236,7 +236,6 @@ export function contactsList(_: IpcMainInvokeEvent): ContactView[] {
 }
 
 export function contactConfirm(_: IpcMainInvokeEvent, userId: string, publicKey: string) { keys?.book.confirm(userId, publicKey); }
-export function contactVerify(_: IpcMainInvokeEvent, userId: string, publicKey: string, verified: boolean) { keys?.book.setVerified(userId, publicKey, verified); }
 export function contactRemove(_: IpcMainInvokeEvent, userId: string, publicKey?: string) { keys?.book.remove(userId, publicKey); }
 export function contactProfile(_: IpcMainInvokeEvent, userId: string, name: string, avatar: string | null) { keys?.book.updateProfile(userId, name, avatar); }
 

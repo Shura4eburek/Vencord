@@ -15,11 +15,11 @@
 | `userId` | Discord ID | ключ записи |
 | `name`, `avatar` | строка / URL | обновляются из Discord, когда он доступен |
 | `channelId` | ID ЛС | через какой ЛС получен (нужен для повторных обменов) |
-| `devices[]` | `{ deviceId, publicKey, addedAt, state: "trusted" \| "pending", verified: boolean, mutual: boolean }` | первый ключ контакта — `trusted`; следующие — `pending` до подтверждения |
+| `devices[]` | `{ deviceId, publicKey, addedAt, state: "trusted" \| "pending", mutual: boolean }` | первый ключ контакта — `trusted`; следующие — `pending` до подтверждения |
 | `addedAt` | ms | |
 
 Переходы устройства: `pending → trusted` (подтверждение пользователем) · любое → удалено (удаление контакта/устройства).
-`verified` ставит пользователь после сверки кода. `mutual` — у собеседника наш ключ тоже есть (research R5):
+`mutual` — у собеседника наш ключ тоже есть (research R5):
 только тогда прежняя схема с ним отключается. Файл контактов — свой на каждый аккаунт Discord:
 `p2pcall-contacts-<userId>.json`.
 
