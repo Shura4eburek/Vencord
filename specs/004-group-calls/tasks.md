@@ -111,7 +111,7 @@ description: "Task list for P2PCall group calls"
 
 - [X] T031 [P] `docs/p2pcall-connect.md`: раздел о групповых звонках (добавить, уйти, предел 5, старые версии, «получен через X»); `docs/p2pcall-todo.md`: пункты групповых звонков и бага «входящий во время звонка» — отметить, шаг 2 дорожной карты — `[~]`
 - [X] T032 Полный прогон: `npx tsx --test src/userplugins/p2pCall/*.test.ts`, `pnpm testTsc`, `pnpm lint` по плагину
-- [ ] T033 Живая проверка втроём по `quickstart.md` (1–10), результаты — в `quickstart.md`
+- [ ] T033 Живая проверка втроём по `quickstart.md` (1–10), результаты — в `quickstart.md` (ишью: https://github.com/Shura4eburek/Vencord/issues/1)
 
 ---
 
