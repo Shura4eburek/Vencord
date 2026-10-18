@@ -19,13 +19,6 @@ const EVERY_MS = 6 * 60 * 60 * 1000;
 let firstTimer: ReturnType<typeof setTimeout> | undefined;
 let everyTimer: ReturnType<typeof setInterval> | undefined;
 
-/** Штатный перезапуск Discord (им же Discord перезапускается после своих обновлений) — сохраняет вход в аккаунт */
-function relaunchDiscord() {
-    const discordRelaunch = (window as any).DiscordNative?.app?.relaunch;
-    if (typeof discordRelaunch === "function") discordRelaunch();
-    else Native.relaunch();
-}
-
 /** Что показать пользователю (specs/002-update-apply-modes/contracts/update.md §3) */
 const ACTION_TEXT: Record<Action, string> = {
     none: "ничего делать не нужно",
@@ -41,9 +34,11 @@ function notify(version: string | null, action: Action) {
     }
     showNotification({
         title: head,
-        body: action === "reload" ? "Нажми, чтобы перезагрузить окно (пара секунд, вход сохранится)" : "Нажми, чтобы перезапустить Discord",
+        // перезапуск из плагина (и app.exit, и штатный DiscordNative.app.relaunch) разлогинивал аккаунт —
+        // Discord перезапускают руками, через трей
+        body: action === "reload" ? "Нажми, чтобы перезагрузить окно (пара секунд, вход сохранится)" : "Перезапусти Discord: трей → «Выйти», затем запусти снова",
         permanent: true,
-        onClick: action === "reload" ? () => location.reload() : relaunchDiscord,
+        onClick: action === "reload" ? () => location.reload() : undefined,
     });
 }
 

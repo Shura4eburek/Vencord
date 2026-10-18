@@ -91,14 +91,6 @@ export function netMissing(_: IpcMainInvokeEvent) {
     return !existsSync(join(__dirname, NET_FILE));
 }
 
-/**
- * Запасной перезапуск. Только quit, не exit: Discord пишет токен входа на диск при штатном закрытии окна,
- * app.exit(0) это пропускает — и после перезапуска аккаунт разлогинен.
- */
-export function relaunch(_: IpcMainInvokeEvent) {
-    app.relaunch();
-    app.quit();
-}
 
 // ── UDP-туннель (specs/001-udp-tunnel-upnp/contracts/tunnel.md §2) ──
 // Сам туннель — в dist/p2pcall-net.js (net.ts): его код не должен попасть в patcher.js, иначе каждая его
