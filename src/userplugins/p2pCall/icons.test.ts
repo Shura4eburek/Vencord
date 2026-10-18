@@ -11,3 +11,11 @@ import { test } from "node:test";
 test("importing ui/icons creates no JSX elements at load time", async () => {
     await assert.doesNotReject(import("./ui/icons"));
 });
+
+test("every icon path is a non-empty SVG path without NaN", async () => {
+    const { PATHS } = await import("./ui/icons");
+    for (const [name, d] of Object.entries(PATHS)) {
+        assert.match(d, /^M[\d\s.,MmLlHhVvCcSsQqTtAaZz-]+$/, name);
+        assert.ok(!d.includes("NaN"), name);
+    }
+});

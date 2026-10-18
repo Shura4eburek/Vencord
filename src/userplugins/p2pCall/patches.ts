@@ -16,12 +16,15 @@ export const HEADER_PATCH = {
     },
 };
 
-/** Область звонка: наш подписанный компонент прямо перед областью звонка Discord */
+/**
+ * Область звонка: родную область Discord рисует наш компонент — одна область с вкладками,
+ * когда в ЛС идут оба звонка (specs/005-call-redesign R1)
+ */
 export const CALL_AREA_PATCH = {
     find: '"Missing channel in Channel.renderCall"',
     replacement: {
         match: /this\.renderCall\(\),(?=this\.renderEmbeddedActivityPanel\(\))/,
-        replace: "$self.renderCallArea(this.props.channel,this.props.height),$&",
+        replace: "$self.renderCallArea(this.props.channel,this.props.height,()=>this.renderCall()),",
     },
 };
 

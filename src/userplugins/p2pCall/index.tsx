@@ -17,7 +17,7 @@ import { CallController } from "./controller";
 import { CALL_AREA_PATCH, HEADER_PATCH, PANEL_PATCH } from "./patches";
 import { settings } from "./settings";
 import { isActive } from "./state";
-import { CallAreaSlot } from "./ui/CallArea";
+import { CallSlot } from "./ui/CallSlot";
 import { ConnectedPanel } from "./ui/ConnectedPanel";
 import { HeaderCallButton } from "./ui/HeaderCallButton";
 import { openIncomingCall } from "./ui/IncomingCallModal";
@@ -50,11 +50,12 @@ export default definePlugin({
         );
     },
 
-    renderCallArea(channel: Channel | undefined, height: number) {
-        if (!controller || !channel?.isDM()) return null;
+    /** renderNative — родная область звонка Discord: при любой нашей ошибке рисуется она (specs/005-call-redesign R1) */
+    renderCallArea(channel: Channel | undefined, height: number, renderNative: () => React.ReactNode) {
+        if (!controller || !channel?.isDM()) return renderNative();
         return (
-            <ErrorBoundary noop>
-                <CallAreaSlot c={controller} channel={channel} height={height} />
+            <ErrorBoundary fallback={() => <>{renderNative()}</>}>
+                <CallSlot c={controller} channel={channel} height={height} renderNative={renderNative} />
             </ErrorBoundary>
         );
     },

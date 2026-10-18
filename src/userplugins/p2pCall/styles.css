@@ -1,427 +1,193 @@
+/* P2P-звонок. Основа — bundle.css дизайн-системы «P2P-звонок» (specs/005-call-redesign R10). Только классы p2p-* */
+
 .p2p-area {
     position: relative;
     display: flex;
     flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 12px;
-    padding: 16px 16px 20px;
-    background: #000;
-    color: #f2f3f5;
-    overflow: hidden;
     flex-shrink: 0;
-}
-
-.p2p-tiles {
-    display: flex;
-    gap: 12px;
-    justify-content: center;
-    align-items: center;
-    flex: 1;
-    min-height: 0;
-    width: 100%;
-}
-
-.p2p-tile {
-    position: relative;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    height: 100%;
-    max-height: 100%;
-    aspect-ratio: 16 / 9;
-    max-width: 48%;
-    border-radius: 8px;
-    background: #1e1f22;
+    min-height: 160px;
     overflow: hidden;
-    box-shadow: 0 0 0 2px transparent;
-    transition: box-shadow 0.1s;
-}
-
-/* 3–5 участников: сетка, плитки уменьшаются по высоте области (specs/004-group-calls) */
-.p2p-tiles-grid {
-    flex-wrap: wrap;
-    align-content: center;
-}
-
-.p2p-tiles-grid .p2p-tile {
-    height: calc(50% - 6px);
-    max-width: calc(33% - 8px);
-}
-
-.p2p-tiles-grid .p2p-avatar {
-    width: 56px;
-    height: 56px;
-}
-
-.p2p-tile-clickable {
-    cursor: pointer;
-}
-
-.p2p-tiles .p2p-tile-clickable:only-child {
-    max-width: 100%;
-}
-
-.p2p-nolink {
-    opacity: 0.6;
-}
-
-.p2p-tile-status {
-    margin-left: 6px;
-    font-size: 12px;
-    color: #b5bac1;
-}
-
-.p2p-speaking {
-    box-shadow: 0 0 0 2px #23a55a;
-}
-
-.p2p-ringing {
-    animation: p2p-ring 1.2s ease-in-out infinite;
-}
-
-@keyframes p2p-ring {
-    50% { box-shadow: 0 0 0 4px rgb(35 165 90 / 60%); }
-}
-
-.p2p-avatar {
-    width: 80px;
-    height: 80px;
-    border-radius: 50%;
-}
-
-.p2p-video {
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
     background: #000;
+    color: var(--text-normal, #dbdee1);
+    font-family: var(--font-primary, "gg sans", "Noto Sans", sans-serif);
+    container: p2p / inline-size;
+    user-select: none;
 }
 
-.p2p-mirror {
-    transform: scaleX(-1);
-}
+/* «На весь экран»: окно в полноэкранном режиме, область поверх всего, но под слоями меню и тултипов Discord */
+.p2p-area-full { position: fixed; inset: 0; z-index: 1000; height: auto !important; }
+.p2p-area-full .p2p-resize { display: none; }
+.p2p-area svg, .p2p-panel svg { display: block; flex: none; }
 
-.p2p-tile-label {
-    position: absolute;
-    left: 8px;
-    bottom: 8px;
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    padding: 2px 8px;
-    border-radius: 4px;
-    background: rgb(0 0 0 / 60%);
-    font-size: 14px;
-    font-weight: 500;
-}
+/* шапка */
+.p2p-header { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 12px; height: 48px; padding: 0 12px 0 16px; }
+.p2p-header-left { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.p2p-title { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 16px; font-weight: 600; line-height: 20px; color: var(--header-primary, #f2f3f5); }
+.p2p-title > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.p2p-title > svg { color: var(--interactive-normal, #b5bac1); }
+.p2p-header-right { display: flex; align-items: center; gap: 4px; flex: none; }
+.p2p-icon-btn { position: relative; display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--interactive-normal, #b5bac1); cursor: pointer; transition: color .15s, background-color .15s; }
+.p2p-icon-btn:hover { color: var(--interactive-hover, #dbdee1); background: var(--background-modifier-hover, rgb(78 80 88 / 30%)); }
+.p2p-icon-btn.p2p-danger { color: var(--status-danger, #da373c); }
 
-.p2p-tile-badge {
-    color: #f23f42;
-}
+/* вкладки: только когда в ЛС идут оба звонка */
+.p2p-tabs { flex: none; display: flex; align-items: center; gap: 2px; padding: 2px; border-radius: 8px; background: var(--background-secondary, #2b2d31); font-family: var(--font-primary, "gg sans", "Noto Sans", sans-serif); }
+.p2p-tab { display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: 0; border-radius: 6px; background: transparent; color: var(--interactive-normal, #b5bac1); font-family: inherit; font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer; transition: color .15s, background-color .15s; }
+.p2p-tab:hover { color: var(--interactive-hover, #dbdee1); background: var(--background-modifier-hover, rgb(78 80 88 / 30%)); }
+.p2p-tab-active, .p2p-tab-active:hover { color: var(--interactive-active, #fff); background: var(--background-modifier-selected, rgb(78 80 88 / 60%)); }
+.p2p-tab-ind { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--text-muted, #949ba4); font-variant-numeric: tabular-nums; }
+.p2p-tab-ind svg { color: var(--status-positive, #23a55a); }
+.p2p-tab-active .p2p-tab-ind { display: none; }
+.p2p-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--status-positive, #23a55a); flex: none; }
 
-.p2p-caption {
-    font-size: 14px;
-    color: #b5bac1;
-}
+/* вкладки поверх родной области Discord: её высоту не меняем */
+.p2p-native-wrap { position: relative; display: flex; flex-direction: column; min-height: 0; }
+/* без вкладок обёртка не влияет на раскладку Discord, но остаётся тем же элементом — его область не пересоздаётся */
+.p2p-native-plain { display: contents; }
+.p2p-tabs-float { position: absolute; top: 10px; left: 50%; z-index: 10; transform: translateX(-50%); box-shadow: 0 4px 12px rgb(0 0 0 / 35%); }
 
-.p2p-controls {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-}
+/* сцена и сетка */
+.p2p-stage { position: relative; flex: 1; min-height: 0; display: flex; padding: 0 16px 8px; }
+.p2p-grid { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-content: center; justify-content: center; gap: 8px; }
+.p2p-grid > .p2p-tile { flex: 0 0 calc(50% - 4px); max-height: 100%; }
+.p2p-grid[data-count="1"] > .p2p-tile { flex-basis: min(100%, 720px); }
+.p2p-grid[data-count="3"] > .p2p-tile { flex-basis: calc((100% - 16px) / 3); }
+.p2p-grid[data-count="4"] > .p2p-tile { flex-basis: calc(50% - 4px); max-height: calc(50% - 4px); }
+.p2p-grid[data-count="5"] > .p2p-tile, .p2p-grid[data-count="6"] > .p2p-tile { flex-basis: calc((100% - 16px) / 3); max-height: calc(50% - 4px); }
 
-.p2p-ctrl {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 48px;
-    height: 48px;
-    border: 0;
-    border-radius: 50%;
-    background: #2b2d31;
-    color: #f2f3f5;
-    cursor: pointer;
-}
+/* плитка */
+.p2p-tile { position: relative; display: grid; place-items: center; aspect-ratio: 16 / 9; max-width: 100%; min-width: 0; border-radius: 8px; overflow: hidden; background: var(--p2p-banner, var(--background-secondary, #2b2d31)); transition: opacity .2s, background-color .2s; }
+.p2p-tile-clickable { cursor: pointer; }
+.p2p-tile::after { content: ""; position: absolute; inset: 0; z-index: 3; border-radius: inherit; box-shadow: inset 0 0 0 2px transparent; transition: box-shadow .15s; pointer-events: none; }
+.p2p-tile:focus-visible { outline: 2px solid var(--brand-500, #5865f2); outline-offset: 2px; }
+.p2p-tile-center { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.p2p-avatar { display: grid; place-items: center; width: 80px; height: 80px; border-radius: 50%; background: var(--brand-500, #5865f2); flex: none; overflow: hidden; }
+.p2p-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.p2p-badge { position: absolute; right: 8px; bottom: 8px; z-index: 2; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: rgb(0 0 0 / 60%); color: #fff; }
+.p2p-name { position: absolute; left: 8px; bottom: 8px; z-index: 2; max-width: calc(100% - 52px); padding: 3px 8px; border-radius: 4px; background: rgb(0 0 0 / 60%); color: #fff; font-size: 14px; font-weight: 500; line-height: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0; transform: translateY(4px); transition: opacity .15s, transform .15s; pointer-events: none; }
+.p2p-tile:hover .p2p-name, .p2p-tile:focus-visible .p2p-name, .p2p-has-video .p2p-name { opacity: 1; transform: none; }
+.p2p-caption { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: #fff; text-shadow: 0 1px 2px rgb(0 0 0 / 50%); }
 
-.p2p-ctrl:hover {
-    background: #3f4147;
-}
+/* состояния плитки */
+.p2p-speaking::after { box-shadow: inset 0 0 0 2px var(--status-positive, #23a55a); }
+.p2p-ringing::after { animation: p2p-ring 1.4s ease-out infinite; }
+.p2p-ringing .p2p-avatar { animation: p2p-breathe 1.4s ease-in-out infinite; }
+.p2p-nolink::before { content: ""; position: absolute; inset: 0; z-index: 1; background: rgb(0 0 0 / 55%); }
+.p2p-nolink .p2p-tile-center { z-index: 2; }
+.p2p-nolink .p2p-avatar { opacity: .55; filter: grayscale(.6); }
+.p2p-video { position: absolute; inset: 0; z-index: 0; width: 100%; height: 100%; object-fit: cover; background: #000; }
+.p2p-video-contain { object-fit: contain; }
+.p2p-mirror { transform: scaleX(-1); }
+.p2p-has-video .p2p-tile-center { display: none; }
+.p2p-live { position: absolute; left: 8px; top: 8px; z-index: 2; padding: 2px 6px; border-radius: 4px; background: var(--status-danger, #da373c); color: #fff; font-size: 11px; font-weight: 700; line-height: 14px; text-transform: uppercase; letter-spacing: .02em; }
+.p2p-spinner { width: 12px; height: 12px; border-radius: 50%; border: 2px solid rgb(255 255 255 / 30%); border-top-color: #fff; animation: p2p-spin .8s linear infinite; }
 
-.p2p-ctrl-off {
-    background: #f2f3f5;
-    color: #000;
-}
+/* фокус */
+.p2p-focus { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+.p2p-focus-main { flex: 1; min-height: 0; display: flex; justify-content: center; }
+.p2p-focus-main > .p2p-tile { height: 100%; max-height: 100%; }
+.p2p-strip { flex: none; height: 84px; display: flex; justify-content: center; gap: 8px; overflow-x: auto; scrollbar-width: none; }
+.p2p-strip > .p2p-tile { height: 100%; flex: none; }
+.p2p-strip .p2p-avatar { width: 40px; height: 40px; }
+.p2p-strip .p2p-badge { right: 4px; bottom: 4px; width: 22px; height: 22px; }
+.p2p-strip .p2p-name { left: 4px; bottom: 4px; max-width: calc(100% - 34px); padding: 1px 6px; font-size: 12px; line-height: 16px; }
+.p2p-strip .p2p-caption { font-size: 11px; }
 
-.p2p-ctrl-off:hover {
-    background: #dbdee1;
-}
+/* статистика */
+.p2p-stats { position: absolute; top: 0; left: 24px; z-index: 4; padding: 6px 8px; border-radius: 6px; background: rgb(0 0 0 / 60%); backdrop-filter: blur(6px); color: #fff; font-family: var(--font-code, ui-monospace, monospace); font-size: 12px; line-height: 16px; font-variant-numeric: tabular-nums; pointer-events: none; }
+.p2p-stats-ok { color: var(--status-positive, #23a55a); }
 
-.p2p-ctrl-danger {
-    background: #da373c;
-    color: #fff;
-}
+/* состояния звонка */
+.p2p-state { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center; }
+.p2p-state-title { font-size: 20px; font-weight: 600; line-height: 24px; color: var(--header-primary, #f2f3f5); }
+.p2p-state-sub { display: flex; align-items: center; gap: 6px; font-size: 14px; color: var(--text-muted, #949ba4); }
+.p2p-pulse { position: relative; overflow: visible; }
+.p2p-pulse::before, .p2p-pulse::after { content: ""; position: absolute; inset: 0; border-radius: 50%; animation: p2p-pulse 1.8s ease-out infinite; }
+.p2p-pulse::after { animation-delay: .9s; }
+.p2p-pulse img { border-radius: 50%; }
 
-.p2p-ctrl-danger:hover {
-    background: #a12d2f;
-}
+/* панель управления */
+.p2p-controls { --p2p-ctrl-size: 56px; flex: none; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; padding: 8px 16px 16px; }
+.p2p-controls-left { justify-self: start; display: flex; gap: 8px; }
+.p2p-controls-center { display: flex; align-items: center; gap: 12px; }
+.p2p-controls-right { justify-self: end; display: flex; gap: 8px; }
+.p2p-ctrl { position: relative; display: grid; place-items: center; width: var(--p2p-ctrl-size, 56px); height: var(--p2p-ctrl-size, 56px); padding: 0; border: 0; border-radius: 50%; background: var(--background-secondary, #2b2d31); color: var(--interactive-active, #fff); cursor: pointer; transition: filter .15s, background-color .15s, color .15s, transform .12s; }
+.p2p-ctrl:hover { filter: brightness(1.25); }
+.p2p-ctrl:active { transform: scale(.96); }
+.p2p-ctrl-sm { width: 40px; height: 40px; background: transparent; color: var(--interactive-normal, #b5bac1); }
+.p2p-ctrl-sm:hover { filter: none; color: var(--interactive-hover, #dbdee1); background: var(--background-modifier-hover, rgb(78 80 88 / 30%)); }
+.p2p-ctrl-group { display: flex; align-items: center; height: var(--p2p-ctrl-size, 56px); border-radius: 999px; background: var(--background-secondary, #2b2d31); color: var(--interactive-active, #fff); transition: background-color .15s, color .15s; }
+.p2p-ctrl-group > .p2p-ctrl { background: transparent; color: inherit; }
+.p2p-ctrl-group > .p2p-ctrl-chevron { width: 30px; margin-left: -10px; border-radius: 0 999px 999px 0; }
+.p2p-ctrl-group:hover { filter: brightness(1.15); }
+.p2p-ctrl-group > .p2p-ctrl:hover { filter: none; background: rgb(255 255 255 / 6%); }
+.p2p-ctrl-off, .p2p-ctrl-group.p2p-ctrl-off { background: var(--white-500, #fff); color: var(--background-tertiary, #1e1f22); }
+.p2p-ctrl-group.p2p-ctrl-off > .p2p-ctrl:hover { background: rgb(0 0 0 / 6%); }
+.p2p-ctrl-on { background: var(--status-positive, #23a55a); color: #fff; }
+.p2p-ctrl-danger { background: var(--status-danger, #da373c); color: #fff; }
+.p2p-ctrl-danger:hover { filter: brightness(.9); }
+.p2p-ctrl-positive { background: var(--status-positive, #23a55a); color: #fff; }
 
-.p2p-hint {
-    height: 32px;
-    padding: 0 12px;
-    border: 0;
-    border-radius: 16px;
-    background: #2b2d31;
-    color: #f2f3f5;
-    cursor: pointer;
-}
+/* поповер качества демки */
+.p2p-popover-anchor { position: relative; }
+.p2p-popover { position: absolute; left: 50%; bottom: calc(100% + 12px); z-index: 15; width: 360px; padding: 12px; border-radius: 8px; background: var(--background-floating, #111214); box-shadow: 0 8px 24px rgb(0 0 0 / 45%); transform: translateX(-50%); cursor: default; animation: p2p-fade .15s ease-out; }
+.p2p-popover-actions { display: flex; gap: 8px; margin-top: 4px; }
+.p2p-popover-actions > .p2p-btn { flex: 1; height: 32px; padding: 0 8px; }
 
-.p2p-chip {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    text-align: right;
-    position: absolute;
-    top: 8px;
-    right: 12px;
-    padding: 2px 8px;
-    border-radius: 4px;
-    background: rgb(0 0 0 / 60%);
-    font-size: 12px;
-    color: #b5bac1;
-}
+/* кнопки */
+.p2p-btn { display: flex; align-items: center; justify-content: center; gap: 8px; height: 38px; padding: 0 16px; border: 0; border-radius: 4px; color: #fff; font-family: inherit; font-size: 14px; font-weight: 500; line-height: 16px; cursor: pointer; transition: filter .15s; }
+.p2p-btn:hover { filter: brightness(.92); }
+.p2p-btn:disabled { opacity: .5; cursor: not-allowed; filter: none; }
+.p2p-btn-danger { background: var(--status-danger, #da373c); }
+.p2p-btn-positive { background: var(--status-positive, #23a55a); }
+.p2p-btn-brand { background: var(--brand-500, #5865f2); }
+.p2p-btn-secondary { background: var(--button-secondary-background, #4e5058); }
 
-.p2p-resize {
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    height: 6px;
-    cursor: ns-resize;
-}
+/* ручка высоты */
+.p2p-resize { flex: none; height: 10px; display: grid; place-items: center; cursor: ns-resize; touch-action: none; }
+.p2p-resize::before { content: ""; width: 40px; height: 4px; border-radius: 2px; background: var(--interactive-muted, #4e5058); transition: background-color .15s, width .15s; }
+.p2p-resize:hover::before, .p2p-resizing .p2p-resize::before { width: 56px; background: var(--interactive-normal, #b5bac1); }
 
-.p2p-plaque {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    padding: 8px;
-    border-bottom: 1px solid #3f4147;
-    background: #232428;
-    color: #f2f3f5;
-}
+/* панель «P2P подключено» над панелью пользователя */
+.p2p-panel { padding: 8px; border-bottom: 1px solid var(--background-modifier-accent, rgb(78 80 88 / 48%)); background: var(--background-secondary-alt, #232428); font-family: var(--font-primary, "gg sans", "Noto Sans", sans-serif); }
+.p2p-panel-row { display: flex; align-items: center; gap: 4px; }
+.p2p-panel-info { flex: 1; min-width: 0; padding-left: 2px; }
+.p2p-panel-status { display: flex; align-items: center; gap: 6px; color: var(--status-positive, #23a55a); font-size: 14px; font-weight: 600; line-height: 18px; }
+.p2p-panel-status.p2p-pending { color: var(--status-warning, #f0b232); }
+.p2p-panel-sub { display: block; max-width: 100%; padding: 0; border: 0; background: none; font-family: inherit; font-size: 12px; line-height: 16px; color: var(--text-muted, #949ba4); text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.p2p-panel-sub:hover { color: var(--text-normal, #dbdee1); text-decoration: underline; }
+.p2p-panel-actions { display: flex; gap: 8px; margin-top: 8px; }
+.p2p-panel-btn { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; height: 32px; border: 0; border-radius: 4px; background: var(--background-modifier-hover, rgb(78 80 88 / 30%)); color: var(--interactive-normal, #b5bac1); font-family: inherit; font-size: 14px; font-weight: 500; cursor: pointer; transition: background-color .15s, color .15s; }
+.p2p-panel-btn:hover { background: var(--background-modifier-selected, rgb(78 80 88 / 60%)); color: var(--interactive-hover, #dbdee1); }
+.p2p-panel-btn.p2p-active { color: var(--status-positive, #23a55a); }
 
-.p2p-plaque-info {
-    min-width: 0;
-}
+/* окно входящего: содержимое модалки Discord */
+.p2p-incoming { display: flex; flex-direction: column; align-items: center; padding: 12px 0 8px; text-align: center; }
+.p2p-incoming .p2p-avatar { width: 80px; height: 80px; }
+.p2p-incoming-name { margin-top: 18px; font-size: 20px; font-weight: 700; line-height: 24px; color: var(--header-primary, #f2f3f5); text-wrap: balance; }
+.p2p-incoming-sub { margin-top: 4px; font-size: 14px; color: var(--text-muted, #949ba4); }
+.p2p-incoming-note { margin-top: 8px; font-size: 13px; color: var(--text-warning, #f0b232); }
+.p2p-incoming-actions { display: flex; justify-content: center; gap: 20px; margin-top: 22px; }
+.p2p-incoming-act { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; color: var(--text-muted, #949ba4); }
+.p2p-incoming-list { display: flex; flex-direction: column; align-self: stretch; gap: 8px; margin-top: 22px; }
 
-.p2p-plaque-status {
-    font-size: 14px;
-    font-weight: 600;
-    color: #23a55a;
-}
+/* выбор источника демки */
+.p2p-sources { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; padding: 8px 0; }
+.p2p-source { display: flex; flex-direction: column; gap: 4px; padding: 6px; border: 0; border-radius: 6px; background: var(--background-tertiary, #1e1f22); color: var(--text-normal, #dbdee1); cursor: pointer; }
+.p2p-source img { width: 100%; border-radius: 4px; }
+.p2p-source span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
 
-.p2p-plaque-wait {
-    color: #f0b232;
-}
+/* качество демки: в выборе источника и в поповере */
+.p2p-q { display: flex; flex-direction: column; gap: 10px; padding: 4px 0 8px; }
+.p2p-q-row { display: flex; flex-direction: column; gap: 6px; }
+.p2p-q-label { font-size: 12px; font-weight: 700; line-height: 16px; letter-spacing: .02em; text-transform: uppercase; color: var(--text-muted, #949ba4); }
+.p2p-q-options { display: flex; gap: 4px; }
+.p2p-q-opt { flex: 1; height: 30px; padding: 0 8px; border: 0; border-radius: 4px; background: var(--background-secondary, #2b2d31); color: var(--text-normal, #dbdee1); font-family: inherit; font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer; transition: background-color .12s, color .12s; }
+.p2p-q-opt:disabled { opacity: .35; cursor: not-allowed; }
+.p2p-q-opt:hover:not(:disabled) { background: var(--background-modifier-selected, rgb(78 80 88 / 60%)); }
+.p2p-q-on, .p2p-q-on:hover:not(:disabled) { background: var(--brand-500, #5865f2); color: #fff; }
 
-.p2p-plaque-peer {
-    max-width: 100%;
-    padding: 0;
-    border: 0;
-    background: none;
-    color: #b5bac1;
-    font-size: 12px;
-    text-align: left;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    cursor: pointer;
-}
-
-.p2p-plaque-peer:hover {
-    text-decoration: underline;
-}
-
-.p2p-plaque-buttons {
-    display: flex;
-    gap: 4px;
-}
-
-.p2p-plaque-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 32px;
-    height: 32px;
-    border: 0;
-    border-radius: 4px;
-    background: none;
-    color: #b5bac1;
-    cursor: pointer;
-}
-
-.p2p-plaque-btn:hover {
-    background: #3f4147;
-    color: #f2f3f5;
-}
-
-.p2p-plaque-hangup:hover {
-    background: #da373c;
-    color: #fff;
-}
-
-.p2p-incoming {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 8px;
-    justify-content: center;
-    padding: 16px 0;
-}
-
-.p2p-incoming-note {
-    color: var(--text-muted);
-    font-size: 13px;
-    text-align: center;
-}
-
-.p2p-incoming-avatar {
-    width: 96px;
-    height: 96px;
-    border-radius: 50%;
-    animation: p2p-ring 1.2s ease-in-out infinite;
-}
-
-.p2p-sources {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    gap: 8px;
-    padding: 8px 0;
-}
-
-.p2p-source {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    padding: 6px;
-    border: 0;
-    border-radius: 6px;
-    background: #1e1f22;
-    color: #dbdee1;
-    cursor: pointer;
-}
-
-.p2p-source img {
-    width: 100%;
-    border-radius: 4px;
-}
-
-.p2p-source span {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: 12px;
-}
-
-.p2p-q {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    padding: 4px 0 8px;
-}
-
-.p2p-q-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.p2p-q-label {
-    width: 110px;
-    flex-shrink: 0;
-    font-size: 13px;
-    color: #b5bac1;
-}
-
-.p2p-q-options {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-}
-
-.p2p-q-opt {
-    padding: 4px 10px;
-    border: 0;
-    border-radius: 4px;
-    background: #2b2d31;
-    color: #dbdee1;
-    font-size: 13px;
-    cursor: pointer;
-}
-
-.p2p-q-opt:disabled {
-    opacity: 0.35;
-    cursor: not-allowed;
-}
-
-.p2p-q-opt:hover:not(:disabled) {
-    background: #3f4147;
-}
-
-.p2p-q-on {
-    background: #5865f2;
-    color: #fff;
-}
-
-.p2p-q-on:hover:not(:disabled) {
-    background: #4752c4;
-}
-
-.p2p-qmenu {
-    position: relative;
-}
-
-.p2p-qmenu-btn {
-    width: 24px;
-    height: 48px;
-    border: 0;
-    border-radius: 12px;
-    background: #2b2d31;
-    color: #f2f3f5;
-    cursor: pointer;
-}
-
-.p2p-plaque .p2p-qmenu-btn {
-    height: 32px;
-    border-radius: 4px;
-    background: none;
-    color: #b5bac1;
-}
-
-.p2p-qmenu-pop {
-    position: absolute;
-    z-index: 100;
-    left: 50%;
-    top: calc(100% + 8px);
-    transform: translateX(-50%);
-    width: 420px;
-    padding: 12px;
-    border-radius: 8px;
-    background: #111214;
-    box-shadow: 0 8px 24px rgb(0 0 0 / 50%);
-}
-
-.p2p-qmenu-up {
-    top: auto;
-    bottom: calc(100% + 8px);
-}
-
-.p2p-plaque .p2p-qmenu-pop {
-    left: auto;
-    right: 0;
-    transform: none;
-}
-
+/* контакты в настройках */
 .p2p-contacts { display: flex; flex-direction: column; gap: 10px; }
 .p2p-contacts-note { color: var(--text-muted); font-size: 13px; }
 .p2p-contact { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border-radius: 8px; background: var(--background-secondary); }
@@ -435,3 +201,29 @@
 .p2p-device-code > div { display: flex; gap: 6px; }
 .p2p-device-code code { padding: 3px 8px; border-radius: 4px; background: var(--background-tertiary); color: var(--header-primary); font-family: var(--font-code); font-size: 15px; letter-spacing: 2px; }
 .p2p-device-pending { color: var(--text-warning, #f0b232); }
+
+@keyframes p2p-ring { 0% { box-shadow: inset 0 0 0 2px rgb(35 165 90 / 95%); } 70% { box-shadow: inset 0 0 0 8px rgb(35 165 90 / 0%); } 100% { box-shadow: inset 0 0 0 2px rgb(35 165 90 / 0%); } }
+@keyframes p2p-breathe { 50% { transform: scale(.94); } }
+@keyframes p2p-pulse { 0% { box-shadow: 0 0 0 0 rgb(35 165 90 / 55%); } 100% { box-shadow: 0 0 0 22px rgb(35 165 90 / 0%); } }
+@keyframes p2p-spin { to { transform: rotate(360deg); } }
+@keyframes p2p-fade { from { opacity: 0; } }
+
+@container p2p (max-width: 620px) {
+    .p2p-controls { --p2p-ctrl-size: 46px; padding-inline: 8px; }
+    .p2p-controls-center { gap: 8px; }
+    .p2p-grid[data-count="3"] > .p2p-tile, .p2p-grid[data-count="5"] > .p2p-tile, .p2p-grid[data-count="6"] > .p2p-tile { flex-basis: calc(50% - 4px); }
+    .p2p-stage { padding-inline: 8px; }
+    .p2p-tile .p2p-avatar { width: 56px; height: 56px; }
+    .p2p-strip .p2p-avatar { width: 32px; height: 32px; }
+}
+
+@container p2p (max-width: 440px) {
+    .p2p-controls { grid-template-columns: 1fr; }
+    .p2p-controls-left, .p2p-controls-right { display: none; }
+    .p2p-controls-center { justify-self: center; }
+    .p2p-tabs + .p2p-title > span { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .p2p-area *, .p2p-incoming *, .p2p-popover, .p2p-tile { animation: none !important; transition: none !important; }
+}

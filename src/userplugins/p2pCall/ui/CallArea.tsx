@@ -5,17 +5,16 @@
  */
 
 import { classes } from "@utils/misc";
-import type { Channel } from "@vencord/discord-types";
-import { Tooltip, UserStore, useState } from "@webpack/common";
+import { Tooltip, useEffect, UserStore, useState } from "@webpack/common";
 
-import type { CallController, MemberView } from "../controller";
+import type { CallController, MemberView, View } from "../controller";
 import { videoLabel } from "../diagLog";
 import { settings } from "../settings";
-import { areaVisible, EndReason } from "../state";
+import { EndReason } from "../state";
 import type { PathType } from "../stats";
-import { CameraIcon, CameraOffIcon, HangupIcon, HeadphonesIcon, HeadphonesOffIcon, MicIcon, MicOffIcon, ScreenIcon, ScreenOffIcon } from "./icons";
-import { pickSource } from "./SourcePicker";
-import { StreamQualityMenu } from "./StreamQualityMenu";
+import { ControlBar } from "./ControlBar";
+import { FocusIcon, GridIcon, PhoneIcon } from "./icons";
+import { nameOf } from "./names";
 import { Tile } from "./Tile";
 import { useCallView } from "./useCallView";
 
@@ -30,101 +29,148 @@ export const END_TEXT: Record<EndReason, string> = {
 };
 export const PATH_TEXT: Record<PathType, string> = { host: "напрямую (LAN)", srflx: "напрямую", relay: "через ретранслятор", tunnel: "напрямую (туннель)", unknown: "…" };
 
-const MIN_H = 160;
-const DEFAULT_H = 300;
+const MIN_H = 200;
+const DEFAULT_H = 360;
 // высота живёт в памяти плагина до перезапуска
 let savedHeight = DEFAULT_H;
 
-function CtrlButton({ label, active, danger, onClick, children }: { label: string; active?: boolean; danger?: boolean; onClick(): void; children: React.ReactNode; }) {
+function Stats({ v }: { v: View; }) {
+    const s = v.stats;
+    if (!s) return null;
     return (
-        <Tooltip text={label}>
-            {props => (
-                <button {...props} className={classes("p2p-ctrl", active && "p2p-ctrl-off", danger && "p2p-ctrl-danger")} onClick={onClick} aria-label={label}>
-                    {children}
-                </button>
-            )}
-        </Tooltip>
+        <div className="p2p-stats">
+            <div><span className="p2p-stats-ok">{s.rttMs ?? "—"} мс</span> · потери {s.lossPct}% · {PATH_TEXT[s.path]}</div>
+            {s.video.out && <div>↑ {videoLabel(s.video.out)} · {Math.round(s.outKbps / 1000)} Мбит/с</div>}
+            {s.video.in && <div>↓ {videoLabel(s.video.in)}</div>}
+        </div>
     );
 }
 
-export function CallAreaSlot({ c, channel, height }: { c: CallController; channel: Channel | undefined; height: number; }) {
+/** Сводное состояние звонка вместо сетки: вызов, соединение, завершён */
+function CallState({ v }: { v: View; }) {
+    const { call } = v;
+    const peer = call.phase === "idle" ? null : UserStore.getUser(call.peerId);
+    const avatar = peer?.getAvatarURL(undefined, 128);
+    if (call.phase === "outgoing") return (
+        <div className="p2p-state">
+            <span className="p2p-avatar p2p-pulse">{avatar && <img src={avatar} alt="" />}</span>
+            <div className="p2p-state-title">{nameOf(call.peerId)}</div>
+            <div className="p2p-state-sub">Вызов…</div>
+        </div>
+    );
+    if (call.phase === "ended") return (
+        <div className="p2p-state">
+            <span className="p2p-avatar">{avatar && <img src={avatar} alt="" />}</span>
+            <div className="p2p-state-title">{END_TEXT[call.reason]}</div>
+        </div>
+    );
+    return (
+        <div className="p2p-state">
+            <span className="p2p-avatar">{avatar && <img src={avatar} alt="" />}</span>
+            <div className="p2p-state-title">{call.phase === "idle" ? "" : nameOf(call.peerId)}</div>
+            <div className="p2p-state-sub"><span className="p2p-spinner" />Соединение…</div>
+        </div>
+    );
+}
+
+/** Область P2P-звонка над чатом ЛС (specs/005-call-redesign US2, contracts/ui.md) */
+export function CallArea({ c, height, tabs }: { c: CallController; height: number; tabs?: React.ReactNode; }) {
     const v = useCallView(c);
     const [h, setH] = useState(savedHeight);
+    const [full, setFull] = useState(false);
+    // Esc или F11 вышли из полноэкранного режима окна — область возвращается на место
+    useEffect(() => {
+        const on = () => { if (!document.fullscreenElement) setFull(false); };
+        document.addEventListener("fullscreenchange", on);
+        return () => document.removeEventListener("fullscreenchange", on);
+    }, []);
+    const [resizing, setResizing] = useState(false);
     // в групповом звонке клик по плитке — она крупно, повторный — обратно к сетке
     const [focus, setFocus] = useState<string | null>(null);
     const { call } = v;
-    // фазы idle/incoming уже отсечены areaVisible, проверка нужна для сужения типа
-    if (!channel || call.phase === "idle" || call.phase === "incoming" || !areaVisible(call, channel.id, v.channels)) return null;
-    const maxH = Math.max(MIN_H, (height || 800) - 200);
+    const maxH = Math.max(MIN_H, Math.round((height || 800) * 0.8));
     const areaH = Math.min(Math.max(h, MIN_H), maxH);
     const selfId = UserStore.getCurrentUser().id;
+    const group = v.members.length > 1;
 
-    const onResize = (e: React.MouseEvent) => {
+    const onResize = (e: React.PointerEvent) => {
         const startY = e.clientY, startH = areaH;
-        const move = (m: MouseEvent) => {
+        setResizing(true);
+        const move = (m: PointerEvent) => {
             const next = Math.min(Math.max(startH + m.clientY - startY, MIN_H), maxH);
             savedHeight = next;
             setH(next);
         };
-        const up = () => { window.removeEventListener("mousemove", move); window.removeEventListener("mouseup", up); };
-        window.addEventListener("mousemove", move);
-        window.addEventListener("mouseup", up);
+        const up = () => { setResizing(false); window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
+        window.addEventListener("pointermove", move);
+        window.addEventListener("pointerup", up);
     };
 
-    const focusOn = focus && v.members.length > 1 && v.members.some(m => m.userId === focus) ? focus : null;
+    // сетка только когда звонок идёт; вызов, соединение вдвоём и завершение — состояние по центру
+    const showGrid = v.inCall ? call.phase !== "ended" : call.phase === "connected";
+    const focusOn = group && focus && v.members.some(m => m.userId === focus) ? focus : null;
     const selfVideo = v.local.screen ?? v.local.cam ?? null;
-    const connected = call.phase === "connected";
+    const title = group ? `Групповой звонок · ${v.members.length + 1}` : call.phase === "idle" ? "" : nameOf(v.members[0]?.userId ?? call.peerId);
 
-    let caption: string | null = null;
-    if (call.phase === "outgoing") caption = "Вызов…";
-    else if (call.phase === "connecting") caption = "Соединение…";
-    else if (call.phase === "ended") caption = END_TEXT[call.reason];
+    const selfTile = (small?: boolean) => (
+        <Tile key={selfId} userId={selfId} video={selfVideo} mirror={!!v.local.cam && !v.local.screen} live={!!v.local.screen} small={small}
+            speaking={v.speaking.self} micOff={!v.local.mic} deafened={v.deafened}
+            onClick={group ? () => setFocus(focusOn === selfId ? null : selfId) : undefined} />
+    );
+    const memberTile = (m: MemberView, small?: boolean) => (
+        <Tile key={m.userId} userId={m.userId} video={m.remote.screen ?? m.remote.cam ?? null} live={!!m.remote.screen} small={small}
+            speaking={m.speaking} micOff={m.micOff} deafened={m.deafened} ringing={m.phase === "outgoing"}
+            // в группе связь с участником может не установиться, хотя он в звонке
+            noLink={group && m.phase !== "connected" && m.phase !== "outgoing"}
+            onClick={group ? () => setFocus(focusOn === m.userId ? null : m.userId) : undefined} />
+    );
+
+    let stage: React.ReactNode;
+    if (!showGrid) stage = <CallState v={v} />;
+    else if (focusOn) {
+        const main = focusOn === selfId ? selfTile() : memberTile(v.members.find(m => m.userId === focusOn)!);
+        stage = (
+            <div className="p2p-focus">
+                <div className="p2p-focus-main">{main}</div>
+                <div className="p2p-strip">
+                    {focusOn !== selfId && selfTile(true)}
+                    {v.members.filter(m => m.userId !== focusOn).map(m => memberTile(m, true))}
+                </div>
+            </div>
+        );
+    } else stage = (
+        <div className="p2p-grid" data-count={v.members.length + 1}>
+            {selfTile()}
+            {v.members.map(m => memberTile(m))}
+        </div>
+    );
 
     return (
-        <div className="p2p-area" style={{ height: areaH }}>
-            {connected && settings.store.showStats && v.stats && (
-                <div className="p2p-chip">
-                    <div>{v.stats.rttMs ?? "—"} мс · потери {v.stats.lossPct}% · {PATH_TEXT[v.stats.path]}</div>
-                    {v.stats.video.out && <div>↑ {videoLabel(v.stats.video.out)} · {Math.round(v.stats.outKbps / 1000)} Мбит/с</div>}
-                    {v.stats.video.in && <div>↓ {videoLabel(v.stats.video.in)}</div>}
+        <div className={classes("p2p-area", resizing && "p2p-resizing", full && "p2p-area-full")} style={{ height: areaH }}>
+            <div className="p2p-header">
+                <div className="p2p-header-left">
+                    {tabs}
+                    <div className="p2p-title"><PhoneIcon width={20} height={20} /><span>{title}</span></div>
                 </div>
-            )}
-            <div className={classes("p2p-tiles", v.members.length > 1 && !focusOn && "p2p-tiles-grid")}>
-                {!focusOn && <Tile userId={selfId} video={selfVideo} mirror={!!v.local.cam && !v.local.screen}
-                    speaking={v.speaking.self} micOff={!v.local.mic} deafened={v.deafened} />}
-                {(v.members.length || call.phase !== "ended" ? v.members : [{ userId: call.peerId, phase: null, remote: {} as MemberView["remote"], speaking: false }]).filter(m => !focusOn || m.userId === focusOn).map(m => (
-                    <Tile key={m.userId} userId={m.userId} video={m.remote.screen ?? m.remote.cam ?? null}
-                        speaking={m.speaking} ringing={m.phase === "outgoing"}
-                        // в группе связь с участником может не установиться, хотя он в звонке
-                        noLink={v.inCall && v.members.length > 1 && m.phase !== "connected"}
-                        onClick={v.members.length > 1 ? () => setFocus(focusOn ? null : m.userId) : undefined} />
-                ))}
+                <div className="p2p-header-right">
+                    {group && showGrid && (
+                        <Tooltip text={focusOn ? "Сетка" : "Фокус"}>
+                            {p => (
+                                <button {...p} className="p2p-icon-btn" aria-label={focusOn ? "Сетка" : "Фокус"}
+                                    onClick={() => setFocus(focusOn ? null : (v.members.find(m => m.remote.screen)?.userId ?? v.members[0].userId))}>
+                                    {focusOn ? <GridIcon width={20} height={20} /> : <FocusIcon width={20} height={20} />}
+                                </button>
+                            )}
+                        </Tooltip>
+                    )}
+                </div>
             </div>
-            {caption && <div className="p2p-caption">{caption}</div>}
-            {call.phase !== "ended" && (
-                <div className="p2p-controls">
-                    {connected && <>
-                        <CtrlButton label={v.local.mic ? "Выключить микрофон" : "Включить микрофон"} active={!v.local.mic} onClick={() => c.toggleMic()}>
-                            {v.local.mic ? <MicIcon /> : <MicOffIcon />}
-                        </CtrlButton>
-                        <CtrlButton label={v.deafened ? "Включить звук" : "Выключить звук"} active={v.deafened} onClick={() => c.toggleDeafen()}>
-                            {v.deafened ? <HeadphonesOffIcon /> : <HeadphonesIcon />}
-                        </CtrlButton>
-                        <CtrlButton label={v.local.cam ? "Выключить камеру" : "Включить камеру"} active={!v.local.cam} onClick={() => c.toggleCam()}>
-                            {v.local.cam ? <CameraIcon /> : <CameraOffIcon />}
-                        </CtrlButton>
-                        <CtrlButton label={v.local.screen ? "Остановить демонстрацию" : "Показать экран"} active={!!v.local.screen}
-                            onClick={() => v.local.screen ? c.stopScreen() : pickSource((id, q) => c.startScreen(id, q))}>
-                            {v.local.screen ? <ScreenOffIcon /> : <ScreenIcon />}
-                        </CtrlButton>
-                        <StreamQualityMenu c={c} up />
-                    </>}
-                    <CtrlButton label="Отключиться" danger onClick={() => c.hangup()}>
-                        <HangupIcon />
-                    </CtrlButton>
-                </div>
-            )}
-            <div className="p2p-resize" onMouseDown={onResize} />
+            <div className="p2p-stage">
+                {showGrid && call.phase === "connected" && settings.store.showStats && <Stats v={v} />}
+                {stage}
+            </div>
+            {call.phase !== "ended" && <ControlBar c={c} v={v} full={full} setFull={setFull} />}
+            <div className="p2p-resize" role="separator" aria-orientation="horizontal" onPointerDown={onResize} />
         </div>
     );
 }

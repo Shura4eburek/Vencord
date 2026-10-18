@@ -37,6 +37,8 @@ export interface MemberView {
     phase: CallState["phase"] | null;
     remote: Partial<Record<TrackKind, MediaStream>>;
     speaking: boolean;
+    micOff: boolean;
+    deafened: boolean;
     stats: CallStats | null;
 }
 
@@ -325,6 +327,13 @@ export class CallController {
         this.mic?.getAudioTracks().forEach(t => { t.enabled = mic; });
         for (const l of this.links.values()) l.setDeafened(deafened);
         this.set({ local: { ...this.v.local, mic }, deafened });
+        this.sendAudio([...this.links.values()]);
+    }
+
+    /** Свой микрофон и звук — собеседникам для бейджа на плитке */
+    private sendAudio(links: PeerLink[]) {
+        const { mic, deafened } = this.audioState;
+        for (const l of links) if (l.state.phase === "connected" || l.state.phase === "connecting") this.sig?.send(l.peer, l.linkId, { type: "audio", mic, deaf: deafened });
     }
 
     private sessions() {
@@ -452,12 +461,7 @@ export class CallController {
             // захват от прошлого звонка, закончившегося, пока он шёл, — не наш
             if (!this.inCall || this.micReady !== ready) { stopStream(mic); return null; }
             // пользователь мог выключить микрофон, пока шёл захват
-            mic.getAudioTracks().forEach(t => { t.enabled = this.audioState.mic; });
-            this.mic = mic;
-            this.selfMeter?.stop();
-            this.selfMeter = new LevelMeter(this.ctx(), mic,
-                self => this.set({ speaking: { self } }),
-                () => this.audioState.mic && !this.audioState.deafened);
+            this.useMic(mic);
             return mic;
         }, e => {
             this.hooks.warn("Микрофон недоступен: " + (e as Error).message);
@@ -465,6 +469,62 @@ export class CallController {
             return null;
         });
         return this.micReady = ready;
+    }
+
+    private useMic(mic: MediaStream) {
+        mic.getAudioTracks().forEach(t => { t.enabled = this.audioState.mic; });
+        this.mic = mic;
+        this.selfMeter?.stop();
+        this.selfMeter = new LevelMeter(this.ctx(), mic,
+            self => this.set({ speaking: { self } }),
+            () => this.audioState.mic && !this.audioState.deafened);
+    }
+
+    /** Смена устройства, в том числе посреди звонка (specs/005-call-redesign contracts/ui.md) */
+    async setDevice(kind: MediaDeviceKind, id: string) {
+        // настройка сохраняется после удачного захвата: сбойное устройство не становится выбором по умолчанию
+        const save = () => {
+            if (kind === "audioinput") settings.store.inputDevice = id;
+            else if (kind === "audiooutput") settings.store.outputDevice = id;
+            else settings.store.cameraDevice = id;
+        };
+        if (!this.inCall) { save(); return; }
+        try {
+            if (kind === "audiooutput") {
+                save();
+                for (const l of this.links.values()) l.setOutput(id);
+            } else if (kind === "videoinput") {
+                const old = this.v.local.cam;
+                if (!old || this.camBusy) { save(); return; }
+                const cam = await getCamera(id);
+                save();
+                // за время захвата камеру могли выключить или звонок закончиться
+                if (!this.inCall || this.v.local.cam !== old) { stopStream(cam); return; }
+                this.set({ local: { ...this.v.local, cam } });
+                // старый захват гасим и при сбое части связей — иначе камера остаётся включённой
+                try { await this.setTrackAll("cam", cam); } finally { stopStream(old); }
+            } else {
+                const old = this.mic;
+                if (!old) { save(); return; }
+                const mic = await getMic(id);
+                save();
+                if (!this.inCall || this.mic !== old) { stopStream(mic); return; }
+                this.useMic(mic);
+                this.micReady = Promise.resolve(mic);
+                try { await this.setTrackAll("mic", mic); } finally { stopStream(old); }
+            }
+            console.info("[P2PCall] device", kind, id || "default");
+        } catch (e) {
+            console.warn("[P2PCall] device", kind, e);
+            this.hooks.warn("Устройство недоступно: " + (e as Error).message);
+        }
+    }
+
+    /** Почему человека нельзя добавить в текущий звонок; null — можно */
+    canAdd(userId: string): string | null {
+        if (!this.inCall) return null;
+        if (this.linkOf(userId)) return "Уже в звонке";
+        return this.addBlocked(userId);
     }
 
     private async startLink(link: PeerLink, video: boolean) {
@@ -650,7 +710,10 @@ export class CallController {
     }
 
     private onIce(link: PeerLink, st: RTCIceConnectionState) {
-        if (st === "connected" || st === "completed") this.dispatchLink(link, { type: "ice-connected" });
+        if (st === "connected" || st === "completed") {
+            this.dispatchLink(link, { type: "ice-connected" });
+            this.sendAudio([link]);
+        }
         else if (st === "failed") this.dispatchLink(link, { type: "ice-failed" });
     }
 
@@ -920,6 +983,10 @@ export class CallController {
             case "leave":
                 if (this.group && m.groupId === this.group.id) this.dropMember(link.userId);
                 return;
+            case "audio":
+                link.remoteAudio = { mic: m.mic !== false, deaf: m.deaf === true };
+                this.queueRefresh();
+                return;
         }
     }
 
@@ -964,6 +1031,10 @@ export class CallController {
 
     // ── Вид ──
 
+    private remoteAudio(l: PeerLink | null) {
+        return { micOff: !!l && !l.remoteAudio.mic, deafened: !!l && l.remoteAudio.deaf };
+    }
+
     private queueRefresh() {
         if (this.refreshQueued) return;
         this.refreshQueued = true;
@@ -977,11 +1048,11 @@ export class CallController {
             for (const m of members(g)) {
                 if (m.userId === this.selfId) continue;
                 const l = this.linkOf(m.userId);
-                list.push({ userId: m.userId, by: m.by, phase: l && !l.invite ? l.state.phase : null, remote: l?.remote ?? {}, speaking: l?.speaking ?? false, stats: l?.stats ?? null });
+                list.push({ userId: m.userId, by: m.by, phase: l && !l.invite ? l.state.phase : null, remote: l?.remote ?? {}, speaking: l?.speaking ?? false, ...this.remoteAudio(l), stats: l?.stats ?? null });
             }
         } else {
             const p = this.primary();
-            if (p && p.state.phase !== "incoming") list.push({ userId: p.userId, by: this.selfId, phase: p.state.phase, remote: p.remote, speaking: p.speaking, stats: p.stats });
+            if (p && p.state.phase !== "incoming") list.push({ userId: p.userId, by: this.selfId, phase: p.state.phase, remote: p.remote, speaking: p.speaking, ...this.remoteAudio(p), stats: p.stats });
         }
 
         const invites: InviteView[] = [];

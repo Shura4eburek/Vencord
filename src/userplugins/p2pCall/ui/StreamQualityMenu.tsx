@@ -7,30 +7,29 @@
 import { useEffect, useRef, useState } from "@webpack/common";
 
 import type { CallController } from "../controller";
+import type { StreamQuality } from "../streamQuality";
 import { QualityControls, useRefreshRate } from "./QualityControls";
-import { useCallView } from "./useCallView";
 
-/** Стрелочка у кнопки демки: качество идущей демки на ходу */
-export function StreamQualityMenu({ c, up }: { c: CallController; up?: boolean; }) {
-    const v = useCallView(c);
+/** Поповер над кнопкой идущей демки: качество на ходу и остановка (specs/005-call-redesign US3) */
+export function StreamQualityPopover({ c, quality, onClose }: { c: CallController; quality: StreamQuality; onClose(): void; }) {
     const hz = useRefreshRate();
-    const [open, setOpen] = useState(false);
+    const [draft, setDraft] = useState(quality);
     const ref = useRef<HTMLDivElement>(null);
     useEffect(() => {
-        if (!open) return;
-        const close = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
-        window.addEventListener("mousedown", close);
-        return () => window.removeEventListener("mousedown", close);
-    }, [open]);
-    if (!v.local.screen) return null;
+        // клик по самой кнопке демки закрывает поповер её же обработчиком — его не считаем «мимо»
+        const outside = (e: MouseEvent) => { if (!ref.current?.parentElement?.contains(e.target as Node)) onClose(); };
+        const esc = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); onClose(); } };
+        window.addEventListener("mousedown", outside);
+        window.addEventListener("keydown", esc, true);
+        return () => { window.removeEventListener("mousedown", outside); window.removeEventListener("keydown", esc, true); };
+    }, []);
     return (
-        <div className="p2p-qmenu" ref={ref}>
-            <button className="p2p-qmenu-btn" aria-label="Качество демки" onClick={() => setOpen(!open)}>▾</button>
-            {open && (
-                <div className={up ? "p2p-qmenu-pop p2p-qmenu-up" : "p2p-qmenu-pop"}>
-                    <QualityControls value={v.screenQuality} hz={hz} onChange={q => c.setScreenQuality(q)} />
-                </div>
-            )}
+        <div className="p2p-popover" ref={ref} role="dialog" aria-label="Качество демонстрации">
+            <QualityControls value={draft} hz={hz} onChange={setDraft} />
+            <div className="p2p-popover-actions">
+                <button className="p2p-btn p2p-btn-danger" onClick={() => { c.stopScreen(); onClose(); }}>Остановить</button>
+                <button className="p2p-btn p2p-btn-brand" onClick={() => { c.setScreenQuality(draft); onClose(); }}>Применить</button>
+            </div>
         </div>
     );
 }

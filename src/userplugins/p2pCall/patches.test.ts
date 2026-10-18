@@ -39,11 +39,13 @@ test("header: appends our button with the captured HeaderBar component", () => {
     assert.ok(out.includes("(0,l.jsx)(td.Ay.Icon,{ref:this.iconRef"));
 });
 
-test("call area: inserted right before Discord's own renderCall()", () => {
+test("call area: Discord's own renderCall() is rendered by our slot", () => {
     assert.ok(CALL_SRC.includes(CALL_AREA_PATCH.find));
     assert.equal(count(CALL_SRC, CALL_AREA_PATCH.replacement.match), 1);
     const out = apply(CALL_SRC, CALL_AREA_PATCH);
-    assert.ok(out.includes(`this.renderHeaderBar(),${SELF}.renderCallArea(this.props.channel,this.props.height),this.renderCall(),this.renderEmbeddedActivityPanel()`));
+    assert.ok(out.includes(`this.renderHeaderBar(),${SELF}.renderCallArea(this.props.channel,this.props.height,()=>this.renderCall()),this.renderEmbeddedActivityPanel()`));
+    // вызов renderCall остался ровно один — внутри стрелки, иначе область Discord нарисуется дважды
+    assert.equal(out.split("this.renderCall()").length - 1, 1);
 });
 
 test("panel: wraps the plain account panel", () => {

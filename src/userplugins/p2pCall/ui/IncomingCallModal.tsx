@@ -9,12 +9,10 @@ import { RenderModalProps } from "@vencord/discord-types";
 import { Modal, openModal, useEffect, UserStore } from "@webpack/common";
 
 import type { CallController } from "../controller";
+import { CameraIcon, HangupIcon, PhoneIcon } from "./icons";
+import { nameOf } from "./names";
 import { useCallView } from "./useCallView";
 
-const nameOf = (id: string) => {
-    const u = UserStore.getUser(id);
-    return u?.globalName ?? u?.username ?? id;
-};
 
 /** Открытые окна входящих по порядку: Esc относится только к верхнему */
 const openOrder: string[] = [];
@@ -41,31 +39,39 @@ function IncomingCall({ c, linkId, modal }: { c: CallController; linkId: string;
     // крестик/клик мимо — иначе звонок остаётся входящим, а ответить уже негде
     const dismiss = () => { c.decline(linkId); modal.onClose(); };
     const group = inv.members.length ? `Групповой звонок: ${[name, ...inv.members.filter(m => m !== inv.from).map(nameOf)].join(", ")}` : null;
-    const subtitle = group ?? (inv.video ? `${name} звонит с видео` : `${name} звонит`);
-    const actions = v.inCall
-        ? [
-            { text: "Отклонить", variant: "secondary" as const, onClick: () => c.decline(linkId) },
-            { text: "Положить текущий и принять", variant: "secondary" as const, onClick: () => c.replaceWith(linkId) },
-            { text: "Добавить сюда", variant: "primary" as const, disabled: !!inv.addBlocked, onClick: () => { c.addHere(linkId); } },
-        ]
-        : [
-            { text: "Отклонить", variant: "secondary" as const, onClick: () => c.decline(linkId) },
-            { text: "Принять с видео", variant: "secondary" as const, onClick: () => c.accept(linkId, true) },
-            { text: "Принять", variant: "primary" as const, onClick: () => c.accept(linkId, false) },
-        ];
+    const sub = v.inCall ? "Звонит, пока вы в звонке" : inv.video ? "Видеозвонок" : "Входящий звонок";
+    const avatar = user?.getAvatarURL(undefined, 128);
     return (
-        <Modal
-            {...modal}
-            onClose={dismiss}
-            title={v.inCall ? "Входящий P2P-звонок во время звонка" : "Входящий P2P-звонок"}
-            subtitle={subtitle}
-            actions={actions}
-        >
+        <Modal {...modal} onClose={dismiss} size="sm" title="Входящий P2P-звонок">
             <div className="p2p-incoming">
-                <img className="p2p-incoming-avatar" src={user?.getAvatarURL(undefined, 128)} alt="" />
-                {v.inCall && inv.addBlocked && <div className="p2p-incoming-note">{inv.addBlocked}</div>}
+                <span className="p2p-avatar p2p-pulse">{avatar && <img src={avatar} alt="" />}</span>
+                <div className="p2p-incoming-name">{group ?? name}</div>
+                <div className="p2p-incoming-sub">{sub}</div>
+                {v.inCall ? (
+                    <div className="p2p-incoming-list">
+                        <button className="p2p-btn p2p-btn-danger" onClick={() => c.decline(linkId)}>Отклонить</button>
+                        <button className="p2p-btn p2p-btn-secondary" onClick={() => c.replaceWith(linkId)}>Положить текущий и принять</button>
+                        <button className="p2p-btn p2p-btn-positive" disabled={!!inv.addBlocked} onClick={() => c.addHere(linkId)}>Добавить сюда</button>
+                        {inv.addBlocked && <div className="p2p-incoming-note">{inv.addBlocked}</div>}
+                    </div>
+                ) : (
+                    <div className="p2p-incoming-actions">
+                        <Act text="Отклонить" className="p2p-ctrl-danger" onClick={() => c.decline(linkId)}><HangupIcon /></Act>
+                        <Act text="Принять" className="p2p-ctrl-positive" onClick={() => c.accept(linkId, false)}><PhoneIcon /></Act>
+                        <Act text="С видео" className="p2p-ctrl-positive" onClick={() => c.accept(linkId, true)}><CameraIcon /></Act>
+                    </div>
+                )}
             </div>
         </Modal>
+    );
+}
+
+function Act({ text, className, onClick, children }: { text: string; className: string; onClick(): void; children: React.ReactNode; }) {
+    return (
+        <div className="p2p-incoming-act">
+            <button className={`p2p-ctrl ${className}`} aria-label={text} onClick={onClick}>{children}</button>
+            {text}
+        </div>
     );
 }
 

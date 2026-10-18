@@ -17,7 +17,9 @@ export const MAX_AGE_MS = 30_000;
 
 export type SignalType = "ring" | "accept" | "decline" | "offer" | "answer" | "ice" | "bye" | "tun" | "pairok"
     // групповой звонок (specs/004-group-calls/contracts/group-signaling.md); старая версия их игнорирует
-    | "intro" | "roster" | "here" | "leave";
+    | "intro" | "roster" | "here" | "leave"
+    // состояние микрофона и звука для бейджа на плитке (specs/005-call-redesign); старая версия игнорирует
+    | "audio";
 export interface SignalMsg {
     type: SignalType; msgId: string; callId: string; from: string; ts: number;
     channelId?: string; video?: boolean; sdp?: string; candidate?: RTCIceCandidateInit | null; reason?: string;
@@ -40,6 +42,9 @@ export interface SignalMsg {
      * Давность, а не «слышал»: иначе двое пересказывали бы друг другу о пропавшем вечно
      */
     seen?: [string, number][];
+    /** audio: микрофон включён, звук выключен */
+    mic?: boolean;
+    deaf?: boolean;
 }
 /** deviceId — устройство, чьим ключом пары открыто сообщение */
 export interface PeerCtx { channelId: string; peerId: string; deviceId?: string; }

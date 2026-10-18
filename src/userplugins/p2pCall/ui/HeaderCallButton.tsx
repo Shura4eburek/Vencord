@@ -11,6 +11,9 @@ import { areaVisible } from "../state";
 import { PhoneLinkIcon } from "./icons";
 import { useCallView } from "./useCallView";
 
+/** Во время звонка кнопка зелёная, как родная кнопка звонка Discord */
+const InCallIcon = (props: any) => <PhoneLinkIcon {...props} color="var(--status-positive, #23a55a)" />;
+
 export function HeaderCallButton({ c, channel, HeaderBar }: { c: CallController; channel: Channel; HeaderBar: any; }) {
     const v = useCallView(c);
     if (areaVisible(v.call, channel.id, v.channels)) return null;
@@ -25,7 +28,7 @@ export function HeaderCallButton({ c, channel, HeaderBar }: { c: CallController;
                     : "P2P-звонок (Shift — с камерой)";
     return (
         <HeaderBar.Icon
-            icon={PhoneLinkIcon}
+            icon={v.inCall ? InCallIcon : PhoneLinkIcon}
             tooltip={tooltip}
             disabled={!up || busy || full}
             onClick={(e: React.MouseEvent) => c.dial(channel.id, channel.recipients[0], e.shiftKey)}

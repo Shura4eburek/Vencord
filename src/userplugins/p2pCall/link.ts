@@ -79,6 +79,8 @@ export class PeerLink {
     session: Session | null = null;
     remote: Partial<Record<TrackKind, MediaStream>> = {};
     speaking = false;
+    /** Микрофон и звук собеседника по его сообщению audio */
+    remoteAudio = { mic: true, deaf: false };
     stats: CallStats | null = null;
     tun: CallTunnel | null = null;
     lastTun: CallTunnel | null = null;
@@ -134,6 +136,10 @@ export class PeerLink {
 
     setDeafened(d: boolean) {
         if (this.audio) this.audio.muted = d;
+    }
+
+    setOutput(deviceId: string) {
+        (this.audio as any)?.setSinkId?.(deviceId || "default").catch(() => { });
     }
 
     /** Туннель готовится, пока идёт вызов; ошибки только в лог — без туннеля связь ведёт себя как раньше */
