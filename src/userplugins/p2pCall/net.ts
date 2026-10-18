@@ -63,7 +63,8 @@ export function createNet(env: NetEnv): NetApi {
     function readSaved(): Saved[] {
         try {
             const raw = JSON.parse(readFileSync(staleFile, "utf8"));
-            return Array.isArray(raw) ? raw : raw ? [raw] : [];
+            // битые записи (обрезанный файл) отбрасываем, а не роняем ими каждый туннель
+            return (Array.isArray(raw) ? raw : [raw]).filter(x => typeof x?.port === "number" && typeof x.igd?.controlUrl === "string");
         } catch {
             return [];
         }
@@ -92,7 +93,6 @@ export function createNet(env: NetEnv): NetApi {
     function dropStaleMappings() {
         if (active.size > 1) return;
         for (const saved of readSaved()) {
-            if (typeof saved?.port !== "number" || typeof saved.igd?.controlUrl !== "string") { forgetMapping(saved?.port, saved?.igd?.controlUrl); continue; }
             // запись стираем, только если роутер подтвердил удаление, — иначе попробуем в следующий раз
             deletePortMapping(saved.igd, saved.port, upnpDeps).then(ok => { if (ok) forgetMapping(saved.port, saved.igd.controlUrl); });
         }

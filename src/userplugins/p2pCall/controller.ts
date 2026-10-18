@@ -119,6 +119,8 @@ export class CallController {
     private lastHereSent = 0;
     private lastHere = new Map<string, number>();
     private autoTried = new Map<string, number>();
+    /** Ключи из intro, чей участник ещё не появился в составе */
+    private pendingIntros = new Map<string, { via: string; key: MemberKey; }>();
     private knownCaps = new Map<string, string[]>();
     private dmChannels = new Map<string, string>();
     private ringing = false;
@@ -253,10 +255,12 @@ export class CallController {
         const block = this.addBlocked(peerId);
         if (block) { this.hooks.warn(block); return; }
         if (!await this.ensureKey(channelId, peerId)) return;
-        if (!this.inCall || !this.group || this.linkOf(peerId)) return;
+        const keys = await this.memberKeys([peerId]);
+        // за время ожидания звонок мог закончиться или он уже добавлен
+        if (!this.inCall || !this.group || this.linkOf(peerId) || this.addBlocked(peerId)) return;
         const link = this.newLink(newCallId(), peerId, channelId);
         link.inviteOut = true;
-        link.ringExtra = { group: { id: this.group.id, roster: toWire(this.group) }, keys: await this.memberKeys([peerId]) };
+        link.ringExtra = { group: { id: this.group.id, roster: toWire(this.group) }, keys };
         this.dispatchLink(link, { type: "dial", ...link.peer, video: false });
     }
 
@@ -365,11 +369,8 @@ export class CallController {
             this.screenSource = sourceId;
             this.capturedQuality = q;
             this.set({ local: { ...this.v.local, screen } });
-            const n = this.sessions().length;
-            await Promise.all(this.sessions().map(async l => {
-                await l.session!.setScreenQuality(q, n);
-                await l.session!.setTrack("screen", screen);
-            }));
+            await this.setTrackAll("screen", screen);
+            await this.applyReceivers();
         } catch (e) {
             this.hooks.warn("Не удалось захватить экран: " + (e as Error).message);
         }
@@ -446,8 +447,10 @@ export class CallController {
 
     /** Микрофон захватывается один раз на звонок и уходит во все связи */
     private ensureMic() {
-        return this.micReady ??= getMic(settings.store.inputDevice).then(mic => {
-            if (!this.inCall) { stopStream(mic); return null; }
+        if (this.micReady) return this.micReady;
+        const ready: Promise<MediaStream | null> = getMic(settings.store.inputDevice).then(mic => {
+            // захват от прошлого звонка, закончившегося, пока он шёл, — не наш
+            if (!this.inCall || this.micReady !== ready) { stopStream(mic); return null; }
             // пользователь мог выключить микрофон, пока шёл захват
             mic.getAudioTracks().forEach(t => { t.enabled = this.audioState.mic; });
             this.mic = mic;
@@ -458,16 +461,17 @@ export class CallController {
             return mic;
         }, e => {
             this.hooks.warn("Микрофон недоступен: " + (e as Error).message);
-            this.audioState = { ...this.audioState, mic: false };
+            if (this.micReady === ready) this.audioState = { ...this.audioState, mic: false };
             return null;
         });
+        return this.micReady = ready;
     }
 
     private async startLink(link: PeerLink, video: boolean) {
         await this.ensureMic();
         if (!this.links.has(link.linkId)) return;
         this.applyAudio();
-        await link.start(this.tracks());
+        await link.start(() => this.tracks());
         this.applyReceivers().catch(() => { });
         if (video && !this.v.local.cam) await this.toggleCam();
     }
@@ -591,7 +595,9 @@ export class CallController {
                 const g = newGroup(link.linkId, this.selfId, now);
                 this.setGroup(join(g, link.userId, link.lastRingAt ? this.selfId : link.userId, now) ?? g);
             }
-            if (link.joinKeys?.length) this.introduce(link.userId, link.joinKeys);
+            // ключи только участников этого состава — не «чей угодно ключ от имени кого угодно»
+            const keys = (link.joinKeys ?? []).filter(k => k && isMember(this.group!, k.userId));
+            if (keys.length) this.introduce(link.userId, keys);
             this.startTicking();
             console.info("[P2PCall] group", JSON.stringify({ id: this.group!.id, members: members(this.group!).map(m => m.userId) }));
         } else if (link.inviteOut && this.group) {
@@ -604,6 +610,8 @@ export class CallController {
             const g = join(this.group, link.userId, this.selfId, now);
             if (!g) { this.dispatchLink(link, { type: "hangup" }); return; }
             this.setGroup(g);
+            // дальше это обычная связь участника: уход по составу закрывает её, как остальные
+            link.inviteOut = false;
             this.introduceToOthers(link);
         }
         this.sendRoster(link);
@@ -654,6 +662,11 @@ export class CallController {
         const after = g ? members(g).map(m => m.userId) : [];
         const now = Date.now();
         for (const u of after) if (!this.lastHere.has(u)) this.lastHere.set(u, now);
+        for (const [u, pi] of this.pendingIntros) {
+            if (!after.includes(u)) continue;
+            this.pendingIntros.delete(u);
+            if (g && isMember(g, pi.via)) this.introduce(pi.via, [pi.key]);
+        }
         if (g && before.length > 1) {
             const name = (u: string) => this.hooks.profile(u).name;
             for (const u of after) if (!before.includes(u) && u !== this.selfId) this.hooks.info(`${name(u)} теперь в звонке`);
@@ -712,6 +725,7 @@ export class CallController {
         this.group = null;
         this.lastHere.clear();
         this.autoTried.clear();
+        this.pendingIntros.clear();
         clearInterval(this.tickTimer);
         clearInterval(this.diagTimer);
         this.tickTimer = this.diagTimer = undefined;
@@ -744,13 +758,12 @@ export class CallController {
     /** Ключи участников (кроме себя и except) — для того, кого добавляем */
     private async memberKeys(except: string[]): Promise<MemberKey[]> {
         if (!this.group) return [];
-        const out: MemberKey[] = [];
-        for (const m of members(this.group)) {
-            if (m.userId === this.selfId || except.includes(m.userId)) continue;
-            const k = await Native.memberKey(m.userId, this.linkOf(m.userId)?.deviceId ?? null).catch(() => null);
-            if (k) out.push({ userId: m.userId, ...this.hooks.profile(m.userId), ...k });
-        }
-        return out;
+        const list = members(this.group).filter(m => m.userId !== this.selfId && !except.includes(m.userId));
+        const keys = await Promise.all(list.map(m => Native.memberKey(m.userId, this.linkOf(m.userId)?.deviceId ?? null).catch(() => null)));
+        return list.flatMap((m, i) => {
+            const k = keys[i];
+            return k ? [{ userId: m.userId, ...this.hooks.profile(m.userId), ...k }] : [];
+        });
     }
 
     /** Новый участник link — остальным: его ключ, чтобы они могли с ним связаться (R4) */
@@ -899,7 +912,10 @@ export class CallController {
             case "roster": this.onRoster(link, m); return;
             case "here": this.onHere(link, m); return;
             case "intro":
-                if (this.group && m.groupId === this.group.id && isMember(this.group, link.userId) && m.key) this.introduce(link.userId, [m.key]);
+                if (!this.group || m.groupId !== this.group.id || !isMember(this.group, link.userId) || !m.key || typeof m.key.userId !== "string") return;
+                // ключ — только участника состава; состав может прийти позже ключа — тогда ждём его
+                if (isMember(this.group, m.key.userId)) this.introduce(link.userId, [m.key]);
+                else this.pendingIntros.set(m.key.userId, { via: link.userId, key: m.key });
                 return;
             case "leave":
                 if (this.group && m.groupId === this.group.id) this.dropMember(link.userId);
@@ -915,11 +931,12 @@ export class CallController {
         const old = this.linkOf(ctx.peerId);
         if (old) {
             if (old.state.phase === "outgoing" && !old.auto && !m.auto) { this.sendBusy(m.callId, ctx); return; }
-            if (this.inCall && !m.auto && this.group && members(this.group).length <= 2) {
+            if (this.inCall && !m.auto && this.group && !old.invite && isMember(this.group, old.userId) && members(this.group).length <= 2) {
                 // вдвоём — как раньше: старый звонок завершается, новый звонит
                 this.leaveGroup(null, false);
             } else {
-                // в группе участник остаётся в составе: его новый вызов — приглашение с «Добавить сюда»
+                // в группе участник остаётся в составе: его новый вызов — приглашение с «Добавить сюда»;
+                // повисшее приглашение от него же просто заменяется новым
                 this.leaving = true;
                 try { this.dispatchLink(old, { type: "remote-bye", callId: old.linkId }); } finally { this.leaving = false; }
             }
