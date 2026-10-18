@@ -10,7 +10,7 @@ import { pairHintOf, utcDay } from "./contacts";
 import { newMsgId, open, seal, topicCall, topicLine } from "./crypto";
 import type { MemberKey, RosterWire } from "./group";
 import type { PakeMsg } from "./pairing";
-import { NostrEvent, RelayConn, WsFactory } from "./relay";
+import { NostrEvent, RelayConn, RelayReject, WsFactory } from "./relay";
 
 export const KIND = 25050;
 export const MAX_AGE_MS = 30_000;
@@ -42,6 +42,8 @@ export interface SignalMsg {
      * Давность, а не «слышал»: иначе двое пересказывали бы друг другу о пропавшем вечно
      */
     seen?: [string, number][];
+    /** ice: пачка кандидатов одним сообщением (caps `icebatch`); null — конец кандидатов */
+    cands?: (RTCIceCandidateInit | null)[];
     /** audio: микрофон включён, звук выключен */
     mic?: boolean;
     deaf?: boolean;
@@ -79,7 +81,7 @@ export class Signaling {
     constructor(private o: SignalingOptions) {
         this.now = o.now ?? Date.now;
         this.lineTopic = topicLine(o.selfId);
-        this.relays = o.relays.map(url => new RelayConn(url, o.ws, ev => this.onEvent(ev), () => this.reportStatus()));
+        this.relays = o.relays.map(url => new RelayConn(url, o.ws, ev => this.onEvent(ev), () => this.reportStatus(), undefined, undefined, r => this.logReject(r), this.now));
     }
 
     start() {
@@ -157,6 +159,16 @@ export class Signaling {
             this.hintCache = { day, map };
         }
         return this.hintCache.map;
+    }
+
+    /** Отказы ретрансляторов в лог, не чаще раза в минуту на ретранслятор и причину */
+    private rejectLogged = new Map<string, number>();
+    private logReject(r: RelayReject) {
+        const key = r.url + " " + r.reason;
+        const now = this.now();
+        if (now - (this.rejectLogged.get(key) ?? -Infinity) < 60_000) return;
+        this.rejectLogged.set(key, now);
+        console.warn("[P2PCall] relay", JSON.stringify(r));
     }
 
     private reportStatus() {

@@ -10,6 +10,7 @@ import { PluginNative } from "@utils/types";
 import { CodecChoice, probeCaps } from "./codecs";
 import { newCallId } from "./crypto";
 import { compactStats } from "./diagLog";
+import { DIAL_WINDOW_MS, dialWait } from "./dialLimit";
 import { Group, initiator, isAlone, isFull, isMember, join, leave, MemberKey, members, mergeRoster, newGroup, parseRoster, routeRing, stale, STALE_MS, toWire } from "./group";
 import { LevelMeter } from "./levelMeter";
 import { LinkTracks, PeerLink, tunnelHint } from "./link";
@@ -91,7 +92,7 @@ const HERE_EVERY_MS = 5000;
 const AUTO_RING_EVERY_MS = 2000;
 const AUTO_RING_FOR_MS = 15_000;
 const AUTO_RETRY_MS = 5000;
-const CAPS = ["group"];
+const CAPS = ["group", "icebatch"];
 const FALLBACK: EndReason[] = ["no-answer", "ice-timeout", "ice-failed"];
 
 /** Что реально выдал захват: разрешение и FPS по настройкам трека — сравнить с выбранным качеством */
@@ -241,9 +242,25 @@ export class CallController {
     }
 
     /** Звонок из ЛС. Во время звонка — приглашение в него (specs/004-group-calls US2) */
+    /** Времена своих вызовов — для ограничения частоты (dialLimit.ts) */
+    private dials: number[] = [];
+
+    /** Можно ли звонить сейчас; нет — предупреждение и false */
+    private dialAllowed() {
+        const now = Date.now();
+        const wait = dialWait(this.dials, now);
+        if (wait) {
+            this.hooks.warn(`Слишком часто звонишь — подожди ${Math.ceil(wait / 1000)} с. Иначе ретрансляторы сигналинга заблокируют за спам`);
+            return false;
+        }
+        this.dials = [...this.dials.filter(t => now - t < DIAL_WINDOW_MS), now];
+        return true;
+    }
+
     async dial(channelId: string, peerId: string, video: boolean) {
         if (this.inCall) return this.invite(channelId, peerId);
         if (this.primary()) return;
+        if (!this.dialAllowed()) return;
         if (!await this.ensureKey(channelId, peerId)) return;
         if (this.inCall || this.primary()) return;
         if (this.hooks.inVoiceChannel()) this.hooks.warn("Ты сейчас в голосовом канале Discord — он продолжит работать параллельно");
@@ -256,6 +273,7 @@ export class CallController {
     async invite(channelId: string, peerId: string) {
         const block = this.addBlocked(peerId);
         if (block) { this.hooks.warn(block); return; }
+        if (!this.dialAllowed()) return;
         if (!await this.ensureKey(channelId, peerId)) return;
         const keys = await this.memberKeys([peerId]);
         // за время ожидания звонок мог закончиться или он уже добавлен
@@ -968,6 +986,10 @@ export class CallController {
             case "tun": link.onTun(m); return;
             case "offer": case "answer": case "ice": {
                 if (!isActive(link.state)) return;
+                if (m.type === "ice" && Array.isArray(m.cands)) {
+                    for (const candidate of m.cands) link.handleSignal({ type: "ice", candidate: candidate ?? null });
+                    return;
+                }
                 const s: OutSignal = m.type === "ice" ? { type: "ice", candidate: m.candidate ?? null } : { type: m.type, sdp: m.sdp! };
                 link.handleSignal(s);
                 return;

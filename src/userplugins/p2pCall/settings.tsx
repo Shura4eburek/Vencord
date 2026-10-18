@@ -7,12 +7,13 @@
 import { definePluginSettings } from "@api/Settings";
 import { OptionType } from "@utils/types";
 
+import { DEFAULT_RELAY_LIST } from "./relay";
 import { DEFAULT_QUALITY, sanitizeQuality, StreamQuality } from "./streamQuality";
 import { ContactsList } from "./ui/Contacts";
 import { DeviceSelect } from "./ui/DeviceSelect";
 import { CheckNowButton } from "./updater";
 
-export const DEFAULT_RELAYS = "wss://relay.damus.io, wss://nos.lol, wss://nostr.mom";
+export const DEFAULT_RELAYS = DEFAULT_RELAY_LIST.join(", ");
 
 export const settings = definePluginSettings({
     relays: { type: OptionType.STRING, description: "Релеи Nostr через запятую (новые заработают после перезапуска Discord)", default: DEFAULT_RELAYS },

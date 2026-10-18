@@ -54,6 +54,9 @@ export interface LinkHost {
     changed(): void;
 }
 
+/** Кандидаты ICE копятся столько и уходят одним сообщением: по сообщению на кандидат ретрансляторы банят за спам */
+export const ICE_BATCH_MS = 150;
+
 export class PeerLink {
     state: CallState = { phase: "idle" };
     timers: ReturnType<typeof setTimeout>[] = [];
@@ -101,7 +104,7 @@ export class PeerLink {
         if (this.session || this.closed) return;
         this.iceRestarted = false;
         const session = new Session(isPolite(this.host.selfId, this.userId), {
-            signal: m => this.host.send(this, m.type === "ice" ? { type: "ice", candidate: m.candidate } : { type: m.type, sdp: m.sdp }),
+            signal: m => m.type === "ice" ? this.sendIce(m.candidate) : this.host.send(this, { type: m.type, sdp: m.sdp }),
             remoteMedia: (kind, stream) => this.onRemote(kind, stream),
             iceState: st => this.onIce(st),
         }, { ownCaps: this.host.ownCaps, codec: () => this.host.codec() });
@@ -132,6 +135,26 @@ export class PeerLink {
     handleSignal(s: OutSignal) {
         if (this.session) this.session.handle(s).catch(e => console.error("[P2PCall] signal", e));
         else this.pendingSignals.push(s);
+    }
+
+    private iceOut: (RTCIceCandidateInit | null)[] = [];
+    private iceTimer: ReturnType<typeof setTimeout> | undefined;
+
+    /** Старой версии — по одному, как раньше; новой — пачкой (caps `icebatch`) */
+    private sendIce(candidate: RTCIceCandidateInit | null) {
+        if (!this.caps.includes("icebatch")) { this.host.send(this, { type: "ice", candidate }); return; }
+        this.iceOut.push(candidate);
+        // конец кандидатов — сразу: дальше ждать нечего
+        if (candidate === null) this.flushIce();
+        else this.iceTimer ??= setTimeout(() => this.flushIce(), ICE_BATCH_MS);
+    }
+
+    private flushIce() {
+        clearTimeout(this.iceTimer);
+        this.iceTimer = undefined;
+        if (!this.iceOut.length || this.closed) { this.iceOut = []; return; }
+        this.host.send(this, { type: "ice", cands: this.iceOut });
+        this.iceOut = [];
     }
 
     setDeafened(d: boolean) {
@@ -213,6 +236,8 @@ export class PeerLink {
 
     close() {
         this.closed = true;
+        clearTimeout(this.iceTimer);
+        this.iceOut = [];
         this.timers.forEach(clearTimeout);
         this.timers = [];
         this.stopSession();

@@ -16,18 +16,17 @@ import type { MemberKey } from "./group";
 import type { TunnelPrepared, TunnelStatus } from "./net";
 import { NetLoader } from "./netLoader";
 import { HandleResult, Pairing, PakeMsg, PeerInfo } from "./pairing";
-import { relayCspSource } from "./relay";
+import { DEFAULT_RELAY_LIST, relayCspSource } from "./relay";
 import { Action, NET_FILE } from "./updateLogic";
 import { applyUpdate, UpdateResult } from "./updateRun";
 
 export type { UpdateResult };
 
-const DEFAULT_RELAYS = ["wss://relay.damus.io", "wss://nos.lol", "wss://nostr.mom"];
 
 function allowRelays() {
     const raw = (RendererSettings.store.plugins?.P2PCall as { relays?: string; } | undefined)?.relays;
     const urls = raw ? raw.split(",").map(s => s.trim()).filter(Boolean) : [];
-    for (const u of [...DEFAULT_RELAYS, ...urls]) {
+    for (const u of [...DEFAULT_RELAY_LIST, ...urls]) {
         const src = relayCspSource(u);
         if (src) CspPolicies[src] = ConnectSrc;
     }

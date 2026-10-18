@@ -7,7 +7,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { BACKOFF_MS, NostrEvent, RelayConn, relayCspSource, WsLike } from "./relay";
+import { BACKOFF_MS, BAN_PAUSE_MS, DEFAULT_RELAY_LIST, LIMIT_PAUSE_MS, limitPause, NostrEvent, RelayConn, relayCspSource, upgradeRelays, WsLike } from "./relay";
 
 class FakeWs implements WsLike {
     readyState = 0;
@@ -110,4 +110,40 @@ test("relayCspSource keeps the wss scheme (scheme-less hosts only allow https)",
     assert.equal(relayCspSource("wss://relay.example.com:7447/path"), "wss://relay.example.com:7447");
     assert.equal(relayCspSource("not a url"), null);
     assert.equal(relayCspSource("https://evil.example"), null);
+});
+
+test("OK false with a ban pauses the relay: it is down and publishes nothing", () => {
+    let now = 0;
+    const sockets: FakeWs[] = [];
+    const timers: { fn: () => void; ms: number; }[] = [];
+    const status: boolean[] = [];
+    const rejects: { reason: string; paused: boolean; }[] = [];
+    const conn = new RelayConn("wss://r", () => { const s = new FakeWs(); sockets.push(s); return s; }, () => { }, up => status.push(up),
+        (fn, ms) => { timers.push({ fn, ms }); return timers.length; }, () => { }, r => rejects.push(r), () => now);
+    conn.start();
+    sockets[0].open();
+    assert.equal(conn.up, true);
+    sockets[0].onmessage!({ data: JSON.stringify(["OK", "id", false, "banned: too many rate-limit violations, try again later"]) });
+    assert.equal(conn.up, false);
+    assert.deepEqual(status, [true, false]);
+    assert.deepEqual(rejects, [{ url: "wss://r", reason: "banned: too many rate-limit violations, try again later", paused: true }]);
+    conn.publish(ev);
+    assert.equal(sockets[0].sent.length, 0);
+    // пауза кончилась — снова живой
+    now = BAN_PAUSE_MS;
+    timers[timers.length - 1].fn();
+    assert.equal(conn.up, true);
+    assert.equal(status[status.length - 1], true);
+});
+
+test("limitPause: ban is long, rate-limited is short, other rejects do not pause", () => {
+    assert.equal(limitPause("banned: too many rate-limit violations"), BAN_PAUSE_MS);
+    assert.equal(limitPause("rate-limited: slow down"), LIMIT_PAUSE_MS);
+    assert.equal(limitPause("invalid: bad signature"), 0);
+    assert.equal(limitPause("duplicate: already have this event"), 0);
+});
+
+test("upgradeRelays replaces only the untouched old default list", () => {
+    assert.equal(upgradeRelays("wss://relay.damus.io, wss://nos.lol, wss://nostr.mom"), DEFAULT_RELAY_LIST.join(", "));
+    assert.equal(upgradeRelays("wss://my.relay"), "wss://my.relay");
 });

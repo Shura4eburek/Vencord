@@ -15,6 +15,7 @@ import { ChannelStore, SelectedChannelStore, showToast, Toasts, UserStore } from
 
 import { CallController } from "./controller";
 import { CALL_AREA_PATCH, HEADER_PATCH, PANEL_PATCH } from "./patches";
+import { upgradeRelays } from "./relay";
 import { settings } from "./settings";
 import { isActive } from "./state";
 import { CallSlot } from "./ui/CallSlot";
@@ -74,6 +75,7 @@ export default definePlugin({
     },
 
     start() {
+        settings.store.relays = upgradeRelays(settings.store.relays);
         const c = new CallController(UserStore.getCurrentUser().id, {
             offerFallback: (channelId, hint) => showNotification({
                 title: "P2P-звонок не удался",
