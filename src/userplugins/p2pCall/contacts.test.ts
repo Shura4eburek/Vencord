@@ -16,7 +16,7 @@ function memory(): Store & { data: string | null; } {
     return s;
 }
 
-const dev = (pub: string, id = "a".repeat(32)) => ({ deviceId: id, publicKey: pub, channelId: "700000000000000003", name: "Reva1v" });
+const dev = (pub: string, id = "a".repeat(32)) => ({ deviceId: id, publicKey: pub, channelId: "700000000000000003", name: "Bob" });
 
 test("first key of a contact is trusted, the next one waits for confirmation", () => {
     const b = new ContactBook(memory());
@@ -43,10 +43,10 @@ test("device and contact removal, persistence", () => {
     const b = new ContactBook(store);
     b.addDevice("1", dev("k1"));
     b.addDevice("1", dev("k2"));
-    b.updateProfile("1", "doomer", "https://cdn/a.png");
+    b.updateProfile("1", "Alice", "https://cdn/a.png");
 
     const again = new ContactBook(store);
-    assert.equal(again.get("1")!.name, "doomer");
+    assert.equal(again.get("1")!.name, "Alice");
 
     again.remove("1", "k2");
     assert.equal(again.get("1")!.devices.length, 1);
@@ -84,9 +84,9 @@ test("both sides derive the same pair key, hint and verification code", () => {
 
 test("introduced keys: trusted for a new contact, pending on another key, own key skipped, own exchange wins", () => {
     const b = new ContactBook(memory());
-    assert.equal(b.introduce("9", { userId: "3", deviceId: "c".repeat(32), publicKey: "k3", name: "doomer" }, "own"), "trusted");
+    assert.equal(b.introduce("9", { userId: "3", deviceId: "c".repeat(32), publicKey: "k3", name: "Alice" }, "own"), "trusted");
     const c = b.get("3")!;
-    assert.deepEqual([c.channelId, c.devices[0].via, c.name], ["", "9", "doomer"]);
+    assert.deepEqual([c.channelId, c.devices[0].via, c.name], ["", "9", "Alice"]);
     assert.equal(b.introduce("9", { userId: "3", deviceId: "d".repeat(32), publicKey: "k4" }, "own"), "pending");
     assert.equal(b.introduce("9", { userId: "5", deviceId: "e".repeat(32), publicKey: "own" }, "own"), null);
     assert.equal(b.introduce("9", { userId: "9", deviceId: "e".repeat(32), publicKey: "k9" }, "own"), null);

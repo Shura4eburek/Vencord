@@ -33,7 +33,7 @@ description: "Task list for UDP tunnel with UPnP port mapping"
 
 ## Phase 3: User Story 1 — звонок с собеседником у того же провайдера (P1) 🎯 MVP
 
-**Goal**: звонок Mamoru ↔ друг соединяется напрямую через туннель с автопробросом.
+**Goal**: звонок A ↔ друг соединяется напрямую через туннель с автопробросом.
 
 **Independent Test**: quickstart, живая проверка шаги 1–5.
 

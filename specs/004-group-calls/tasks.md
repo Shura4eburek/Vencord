@@ -30,7 +30,7 @@ description: "Task list for P2PCall group calls"
 - [X] T005 `controller.ts`: перейти на `Map<userId, PeerLink>` и `Group` (звонок вдвоём = группа из двух, `groupId` = `callId` первой связи); `View` — `members: Member[]` (`{ userId, name, avatar, by, link, speaking, video }`) вместо `remote`/`speaking.peer`; микрофон/камера/демка захватываются один раз и добавляются во все связи; «оглушение» глушит все `<audio>`. Тесты существующих модулей зелёные, `pnpm testTsc` чистый
 - [X] T006 `ui/CallArea.tsx`, `ui/Tile.tsx`, `ui/ConnectedPanel.tsx`: перейти на `View.members` (вдвоём выглядит как сейчас); чип статистики — по связи с выбранным/единственным участником
 
-**Checkpoint**: звонок вдвоём работает как до фичи (ручной звонок Mamoru ↔ doomer).
+**Checkpoint**: звонок вдвоём работает как до фичи (ручной звонок A ↔ B).
 
 ---
 
@@ -111,7 +111,7 @@ description: "Task list for P2PCall group calls"
 
 - [X] T031 [P] `docs/p2pcall-connect.md`: раздел о групповых звонках (добавить, уйти, предел 5, старые версии, «получен через X»); `docs/p2pcall-todo.md`: пункты групповых звонков и бага «входящий во время звонка» — отметить, шаг 2 дорожной карты — `[~]`
 - [X] T032 Полный прогон: `npx tsx --test src/userplugins/p2pCall/*.test.ts`, `pnpm testTsc`, `pnpm lint` по плагину
-- [ ] T033 Живая проверка втроём по `quickstart.md` (1–10), результаты — в `quickstart.md` (ишью: https://github.com/Shura4eburek/Vencord/issues/1)
+- [ ] T033 Живая проверка втроём по `quickstart.md` (1–10), результаты — в `quickstart.md` (ишью: https://github.com/Shura4eburek/Vencord/issues/2)
 
 ---
 
