@@ -16,6 +16,9 @@ const nameOf = (id: string) => {
     return u?.globalName ?? u?.username ?? id;
 };
 
+/** Открытые окна входящих по порядку: Esc относится только к верхнему */
+const openOrder: string[] = [];
+
 /** Окно на каждый входящий: первый звонок или во время звонка (specs/004-group-calls US1) */
 function IncomingCall({ c, linkId, modal }: { c: CallController; linkId: string; modal: RenderModalProps; }) {
     const v = useCallView(c);
@@ -23,9 +26,13 @@ function IncomingCall({ c, linkId, modal }: { c: CallController; linkId: string;
     useEffect(() => { if (!inv) modal.onClose(); }, [!inv]);
     // Esc в модалках Discord закрывает их мимо onClose — отклоняем по нему сами
     useEffect(() => {
-        const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") c.decline(linkId); };
+        openOrder.push(linkId);
+        const onKey = (e: KeyboardEvent) => { if (e.key === "Escape" && openOrder[openOrder.length - 1] === linkId) c.decline(linkId); };
         window.addEventListener("keydown", onKey, true);
-        return () => window.removeEventListener("keydown", onKey, true);
+        return () => {
+            window.removeEventListener("keydown", onKey, true);
+            openOrder.splice(openOrder.indexOf(linkId), 1);
+        };
     }, []);
     if (!inv) return null;
 

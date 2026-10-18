@@ -54,6 +54,14 @@
     height: 56px;
 }
 
+.p2p-tile-clickable {
+    cursor: pointer;
+}
+
+.p2p-tiles .p2p-tile-clickable:only-child {
+    max-width: 100%;
+}
+
 .p2p-nolink {
     opacity: 0.6;
 }

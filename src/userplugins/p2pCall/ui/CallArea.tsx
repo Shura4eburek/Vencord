@@ -8,7 +8,7 @@ import { classes } from "@utils/misc";
 import type { Channel } from "@vencord/discord-types";
 import { Tooltip, UserStore, useState } from "@webpack/common";
 
-import type { CallController } from "../controller";
+import type { CallController, MemberView } from "../controller";
 import { videoLabel } from "../diagLog";
 import { settings } from "../settings";
 import { areaVisible, EndReason } from "../state";
@@ -50,6 +50,8 @@ function CtrlButton({ label, active, danger, onClick, children }: { label: strin
 export function CallAreaSlot({ c, channel, height }: { c: CallController; channel: Channel | undefined; height: number; }) {
     const v = useCallView(c);
     const [h, setH] = useState(savedHeight);
+    // в групповом звонке клик по плитке — она крупно, повторный — обратно к сетке
+    const [focus, setFocus] = useState<string | null>(null);
     const { call } = v;
     // фазы idle/incoming уже отсечены areaVisible, проверка нужна для сужения типа
     if (!channel || call.phase === "idle" || call.phase === "incoming" || !areaVisible(call, channel.id, v.channels)) return null;
@@ -69,6 +71,7 @@ export function CallAreaSlot({ c, channel, height }: { c: CallController; channe
         window.addEventListener("mouseup", up);
     };
 
+    const focusOn = focus && v.members.length > 1 && v.members.some(m => m.userId === focus) ? focus : null;
     const selfVideo = v.local.screen ?? v.local.cam ?? null;
     const connected = call.phase === "connected";
 
@@ -86,14 +89,15 @@ export function CallAreaSlot({ c, channel, height }: { c: CallController; channe
                     {v.stats.video.in && <div>↓ {videoLabel(v.stats.video.in)}</div>}
                 </div>
             )}
-            <div className={classes("p2p-tiles", v.members.length > 1 && "p2p-tiles-grid")}>
-                <Tile userId={selfId} video={selfVideo} mirror={!!v.local.cam && !v.local.screen}
-                    speaking={v.speaking.self} micOff={!v.local.mic} deafened={v.deafened} />
-                {(v.members.length || call.phase !== "ended" ? v.members : [{ userId: call.peerId, phase: null, remote: {}, speaking: false }]).map(m => (
+            <div className={classes("p2p-tiles", v.members.length > 1 && !focusOn && "p2p-tiles-grid")}>
+                {!focusOn && <Tile userId={selfId} video={selfVideo} mirror={!!v.local.cam && !v.local.screen}
+                    speaking={v.speaking.self} micOff={!v.local.mic} deafened={v.deafened} />}
+                {(v.members.length || call.phase !== "ended" ? v.members : [{ userId: call.peerId, phase: null, remote: {} as MemberView["remote"], speaking: false }]).filter(m => !focusOn || m.userId === focusOn).map(m => (
                     <Tile key={m.userId} userId={m.userId} video={m.remote.screen ?? m.remote.cam ?? null}
                         speaking={m.speaking} ringing={m.phase === "outgoing"}
                         // в группе связь с участником может не установиться, хотя он в звонке
-                        noLink={v.inCall && v.members.length > 1 && m.phase !== "connected"} />
+                        noLink={v.inCall && v.members.length > 1 && m.phase !== "connected"}
+                        onClick={v.members.length > 1 ? () => setFocus(focusOn ? null : m.userId) : undefined} />
                 ))}
             </div>
             {caption && <div className="p2p-caption">{caption}</div>}

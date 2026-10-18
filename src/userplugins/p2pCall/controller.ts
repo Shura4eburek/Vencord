@@ -522,6 +522,7 @@ export class CallController {
         const { state, effects } = reduce(prev, e);
         if (state === prev && !effects.length) return;
         link.state = state;
+        if (state.phase !== prev.phase) console.info("[P2PCall] link", JSON.stringify({ link: link.linkId, peer: link.userId, phase: state.phase, reason: state.phase === "ended" ? state.reason : undefined, auto: link.auto, invite: link.invite || link.inviteOut }));
         for (const fx of effects) this.runLink(link, fx);
         // звонящий — сразу, принимающий — только после «Принять»: входящий звонок не открывает порт на роутере
         if (state.phase === "outgoing" || state.phase === "connecting") link.prepareTunnel();

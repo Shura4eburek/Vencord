@@ -19,6 +19,7 @@ interface TileProps {
     ringing?: boolean;
     /** Участник в звонке, но связи с ним нет (specs/004-group-calls R7) */
     noLink?: boolean;
+    onClick?(): void;
 }
 
 function Video({ stream, mirror }: { stream: MediaStream; mirror?: boolean; }) {
@@ -36,12 +37,12 @@ function Video({ stream, mirror }: { stream: MediaStream; mirror?: boolean; }) {
     );
 }
 
-export function Tile({ userId, video, mirror, speaking, micOff, deafened, ringing, noLink }: TileProps) {
+export function Tile({ userId, video, mirror, speaking, micOff, deafened, ringing, noLink, onClick }: TileProps) {
     const user = UserStore.getUser(userId);
     const name = user?.globalName ?? user?.username ?? userId;
     const avatar = user?.getAvatarURL(undefined, 128);
     return (
-        <div className={classes("p2p-tile", speaking && "p2p-speaking", ringing && "p2p-ringing", noLink && "p2p-nolink")}>
+        <div className={classes("p2p-tile", speaking && "p2p-speaking", ringing && "p2p-ringing", noLink && "p2p-nolink", onClick && "p2p-tile-clickable")} onClick={onClick}>
             {video
                 ? <Video stream={video} mirror={mirror} />
                 : <img className="p2p-avatar" src={avatar} alt="" />}

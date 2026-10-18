@@ -137,3 +137,11 @@ description: "Task list for P2PCall group calls"
 2. US2 + US3 — групповые звонки; релиз и проверка втроём.
 3. US4, US5 — устойчивость и демка.
 4. Polish, `/speckit-converge`, `/code-review`.
+
+---
+
+## Phase 9: Convergence
+
+- [X] T034 `ui/IncomingCallModal.tsx`: Esc отклоняет только верхнее (последнее открытое) окно входящего, остальные остаются per Edge Cases «несколько входящих» (contradicts)
+- [X] T035 `ui/CallArea.tsx`/`ui/Tile.tsx`: клик по плитке участника разворачивает её крупно в области звонка, повторный клик — обратно к сетке per T030 (partial)
+- [X] T036 `controller.ts`: лог `[P2PCall] link` при каждом переходе фазы связи (`link`, `peer`, `phase`, `reason`, `auto`/`invite`) per quickstart «Логи» (partial)
