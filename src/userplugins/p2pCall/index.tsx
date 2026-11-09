@@ -11,7 +11,7 @@ import ErrorBoundary from "@components/ErrorBoundary";
 import definePlugin from "@utils/types";
 import type { Channel } from "@vencord/discord-types";
 import { findByPropsLazy } from "@webpack";
-import { ChannelStore, SelectedChannelStore, showToast, Toasts, UserStore } from "@webpack/common";
+import { ChannelStore, SelectedChannelStore, showToast, UserStore } from "@webpack/common";
 
 import { CallController } from "./controller";
 import { CALL_AREA_PATCH, HEADER_PATCH, PANEL_PATCH } from "./patches";
@@ -82,8 +82,8 @@ export default definePlugin({
                 body: hint ? `${hint}. Нажми, чтобы позвонить через Discord` : "Нажми, чтобы позвонить через Discord",
                 onClick: () => VoiceActions.selectVoiceChannel(channelId),
             }),
-            warn: text => showToast(text, Toasts.Type.FAILURE),
-            info: text => showToast(text, Toasts.Type.MESSAGE),
+            warn: text => showToast({ text: text, variant: "critical" }),
+            info: text => showToast({ text: text }),
             onIncoming: linkId => openIncomingCall(c, linkId),
             inVoiceChannel: () => !!SelectedChannelStore.getVoiceChannelId(),
             dmPeers: () => ChannelStore.getSortedPrivateChannels()

@@ -5,7 +5,8 @@
  */
 
 import { PluginNative } from "@utils/types";
-import { Button, useEffect, UserStore, useState } from "@webpack/common";
+import { Button } from "@components/Button";
+import { useEffect, UserStore, useState } from "@webpack/common";
 
 import type { ContactView } from "../native";
 
@@ -31,7 +32,7 @@ export function ContactsList() {
                     <div className="p2p-contact-head">
                         {c.avatar && <img src={c.avatar} alt="" />}
                         <b>{c.name}</b>
-                        <Button size={Button.Sizes.SMALL} color={Button.Colors.RED} look={Button.Looks.LINK} onClick={() => act(Native.contactRemove(c.userId))}>Удалить</Button>
+                        <Button size="small" variant="link" onClick={() => act(Native.contactRemove(c.userId))}>Удалить</Button>
                     </div>
                     {c.devices.map(d => (
                         <div key={d.publicKey} className={"p2p-device" + (d.state === "pending" ? " p2p-device-pending" : "")}>
@@ -43,8 +44,8 @@ export function ContactsList() {
                             {d.state === "pending" &&
                                 <>
                                     <span>новый ключ — звонки ждут подтверждения</span>
-                                    <Button size={Button.Sizes.SMALL} onClick={() => act(Native.contactConfirm(c.userId, d.publicKey))}>Подтвердить</Button>
-                                    <Button size={Button.Sizes.SMALL} color={Button.Colors.RED} onClick={() => act(Native.contactRemove(c.userId, d.publicKey))}>Отклонить</Button>
+                                    <Button size="small" onClick={() => act(Native.contactConfirm(c.userId, d.publicKey))}>Подтвердить</Button>
+                                    <Button size="small" variant="dangerPrimary" onClick={() => act(Native.contactRemove(c.userId, d.publicKey))}>Отклонить</Button>
                                 </>}
                         </div>
                     ))}

@@ -6,7 +6,8 @@
 
 import { showNotification } from "@api/Notifications";
 import { PluginNative } from "@utils/types";
-import { Button, showToast, Toasts, useState } from "@webpack/common";
+import { Button } from "@components/Button";
+import { showToast, useState } from "@webpack/common";
 
 import type { CheckResult } from "./native";
 import { Action, strongest } from "./updateLogic";
@@ -126,7 +127,7 @@ export function CheckNowButton() {
             setBusy(true);
             try {
                 const r = await checkNow();
-                showToast(resultText(r), r.status === "error" ? Toasts.Type.FAILURE : Toasts.Type.SUCCESS);
+                showToast({ text: resultText(r), variant: r.status === "error" ? "critical" : "success" });
             } finally {
                 setBusy(false);
             }
