@@ -205,29 +205,29 @@ export default definePlugin({
 
     patches: [
         {
-            find: "canUseCustomStickersEverywhere:",
+            find: ".STICKERS_EVERYWHERE,",
             replacement: [
                 {
-                    match: /(?<=canUseCustomStickersEverywhere:function\(\i\)\{)/,
+                    match: /(?<=function \i\(\i\)\{)(?=return \i\(\i\.\i\.STICKERS_EVERYWHERE,)/,
                     replace: "return true;",
                     predicate: () => settings.store.enableStickerBypass
                 },
                 {
-                    match: /(?<=canUseHighVideoUploadQuality:function\(\i\)\{)/,
+                    match: /(?<=function \i\(\i\)\{)(?=return \i\(\i\.\i\.INCREASED_VIDEO_UPLOAD_QUALITY,)/,
                     replace: "return true;",
                     predicate: () => settings.store.enableStreamQualityBypass
                 },
                 {
-                    match: /(?<=canStreamQuality:function\(\i,\i\)\{)/,
+                    match: /(?<=function \i\(\i,\i\)\{)(?=return"high"===\i\?\i\(\i\.\i\.STREAM_HIGH_QUALITY,)/,
                     replace: "return true;",
                     predicate: () => settings.store.enableStreamQualityBypass
                 },
                 {
-                    match: /(?<=canUseClientThemes:function\(\i\)\{)/,
+                    match: /(?<=function \i\(\i\)\{)(?=return \i\(\i\.\i\.CLIENT_THEMES,)/,
                     replace: "return true;"
                 },
                 {
-                    match: /(?<=canUsePremiumAppIcons:function\(\i\)\{)/,
+                    match: /(?<=function \i\(\i\)\{)(?=return \i\(\i\.\i\.APP_ICONS,)/,
                     replace: "return true;"
                 }
             ],
